@@ -8,7 +8,12 @@ import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { applyLegacyEnv, migrateDataDir } from '../engine/env.js';
-import { createEngine, createTestAgent, FileSecretStore } from '../engine/index.js';
+import {
+	classifyByRules,
+	createEngine,
+	createTestAgent,
+	FileSecretStore
+} from '../engine/index.js';
 import { createRequestHandler } from './app.js';
 
 applyLegacyEnv();
@@ -46,7 +51,8 @@ const engine = createEngine({
 	gitlabApiUrl: env.PATCHWORK_GITLAB_API_URL || undefined,
 	secrets: new FileSecretStore(path.join(dataDir, 'secrets.json')),
 	// End-to-end tests use a scripted agent instead of the real model.
-	runAgent: env.PATCHWORK_TEST_AGENT ? createTestAgent(env.PATCHWORK_TEST_AGENT) : undefined
+	runAgent: env.PATCHWORK_TEST_AGENT ? createTestAgent(env.PATCHWORK_TEST_AGENT) : undefined,
+	classifyMode: env.PATCHWORK_TEST_AGENT ? classifyByRules : undefined
 });
 
 const server = createServer(

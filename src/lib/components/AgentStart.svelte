@@ -5,6 +5,7 @@
 	import type { Path } from '$app/types';
 	import GitPullRequestDraft from '@lucide/svelte/icons/git-pull-request-draft';
 	import Lightbulb from '@lucide/svelte/icons/lightbulb';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import MessageCircleQuestion from '@lucide/svelte/icons/message-circle-question';
 	import MessagesSquare from '@lucide/svelte/icons/messages-square';
@@ -62,19 +63,35 @@
 		chosen = attributes.map((a) => a.id);
 	});
 
-	// Auto: the mode follows what the message asks for ("review <link>", "how should we…").
-	// Picking a mode yourself turns that off until you pick Auto again.
+	// Auto: the mode follows what the message asks for. The keyword rules answer at once, then a
+	// small model decides once you pause typing. Picking a mode yourself turns that off until you
+	// pick Auto again.
 	let auto = $state(untrack(() => !pinned));
+	let deciding = $state(false);
+	/** Only the latest question's answer counts; earlier ones are for text you've since changed. */
+	let question = 0;
 	const link = $derived(findPullRequestLink(text));
+	function follow(detected: AgentMode) {
+		if (detected !== mode) {
+			mode = detected;
+			error = null;
+		}
+	}
 	$effect(() => {
+		const id = ++question;
+		untrack(() => (deciding = false));
 		if (!auto) return;
-		const detected = detectAgentMode(text);
-		untrack(() => {
-			if (detected !== mode) {
-				mode = detected;
-				error = null;
-			}
-		});
+		const message = text;
+		untrack(() => follow(detectAgentMode(message)));
+		if (!message.trim() || findPullRequestLink(message)) return;
+		const timer = setTimeout(async () => {
+			deciding = true;
+			const answer = await client.classifyMessage({ text: message }).catch(() => null);
+			if (id !== question) return;
+			deciding = false;
+			if (answer) follow(answer.mode);
+		}, 800);
+		return () => clearTimeout(timer);
 	});
 	const modeNames: Record<AgentMode, () => string> = {
 		change: m.agent_mode_change,
@@ -130,6 +147,9 @@
 
 	/** The first message starts a run (change, review or exploration), then the conversation opens. */
 	async function start(message: string) {
+		// Send in the mode that's shown; a late answer must not switch it afterwards.
+		question++;
+		deciding = false;
 		error = null;
 		try {
 			let runId: string;
@@ -214,8 +234,9 @@
 						data-mode={mode}
 						data-auto={auto}
 					>
-						<ToggleGroup.Item value="auto" title={m.agent_mode_auto_hint()}
-							><Sparkles />{auto && text.trim()
+						<ToggleGroup.Item value="auto" title={m.agent_mode_auto_hint()} aria-busy={deciding}
+							>{#if deciding}<LoaderCircle class="animate-spin" />{:else}<Sparkles />{/if}{auto &&
+							text.trim()
 								? m.agent_mode_auto_detected({ mode: modeNames[mode]() })
 								: m.agent_mode_auto()}</ToggleGroup.Item
 						>

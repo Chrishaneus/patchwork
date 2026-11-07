@@ -100,8 +100,12 @@ The Repositories page has two tabs. Wherever local folders are allowed, they com
 
 Everything starts from **Agent** (under **Workflows** in the sidebar). By default the mode is
 **Auto**: it follows what you write, and the button shows what it picked (e.g. "Auto: Review").
+When you pause typing, a small, fast model (Claude Haiku, with no tools) reads the message and
+picks the mode; the button shows a spinner meanwhile. Until it answers, or when it can't (no
+Anthropic credentials), keyword rules decide:
 
-- A pull request link, or "review/check … PR #12", means a review.
+- A pull request link, or "review/check … PR #12", means a review. A link always does, without
+  asking the model.
 - A question about the code ("can you explain …", "what does …", "how does …") means Ask.
 - "Explore …", "How should we …", "What are the options for …" or "compare …" means an
   exploration.

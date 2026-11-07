@@ -10,7 +10,9 @@ import {
 	type Repository,
 	type Settings
 } from '#lib/engine/contract.js';
+import { detectAgentMode, findPullRequestLink } from '#lib/agent-mode.js';
 import { createClaudeAgentRunner, type AgentRunner } from './agent.js';
+import { createClaudeModeClassifier, type ModeClassifier } from './classifier.js';
 import { EngineEvents } from './events.js';
 import { TaskLogs } from './logs.js';
 import { parseRemoteUrl } from './git.js';
@@ -28,6 +30,7 @@ import { MemorySecretStore, type SecretStore } from './secrets.js';
 import { JsonStore } from './store.js';
 
 export type { AgentRunner } from './agent.js';
+export { classifyByRules, type ModeClassifier } from './classifier.js';
 export { FileSecretStore, type SecretStore } from './secrets.js';
 export { createTestAgent } from './test-agent.js';
 
@@ -38,6 +41,8 @@ export interface EngineOptions {
 	secrets?: SecretStore;
 	/** The AI agent. Defaults to the Claude Agent SDK. */
 	runAgent?: AgentRunner;
+	/** Picks the workflow for Auto mode. Defaults to a small Claude model. */
+	classifyMode?: ModeClassifier;
 	/** Path to the Claude Code binary, when the host must point at it (packaged Electron). */
 	agentExecutable?: string;
 	/** Server mode: folders repositories must live in (e.g. the mounted /repos). */
@@ -64,6 +69,9 @@ export interface Engine extends EngineApi {
 const API_KEY = 'anthropicApiKey';
 const GITHUB_TOKEN = 'githubToken';
 const GITLAB_TOKEN = 'gitlabToken';
+/** Long enough to read the intent; the rest of a long message doesn't change it. */
+const MAX_CLASSIFY_CHARS = 4000;
+const CLASSIFY_TIMEOUT_MS = 15_000;
 
 /** Create the engine. Hosts (Electron main, the HTTP server) wrap it with `handleEngineCall`. */
 export function createEngine(options: EngineOptions): Engine {
@@ -81,6 +89,8 @@ export function createEngine(options: EngineOptions): Engine {
 
 	const getApiKey = async () =>
 		(await secrets.get(API_KEY)) ?? process.env.ANTHROPIC_API_KEY ?? null;
+	const classifyMode =
+		options.classifyMode ?? createClaudeModeClassifier({ executable: options.agentExecutable });
 	const envGitHubToken = () => process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
 	// GitHub sign-in first, then a saved token, then the environment.
 	const getGitHubToken = async () =>
@@ -319,6 +329,24 @@ export function createEngine(options: EngineOptions): Engine {
 		startExplore: afterReady(({ repositoryIds, idea }) =>
 			startReadOnly('explore', repositoryIds, idea)
 		),
+		async classifyMessage({ text }) {
+			if (typeof text !== 'string') throw new EngineError('invalid_input', 'Write a message.');
+			const message = text.trim().slice(0, MAX_CLASSIFY_CHARS);
+			// A pull request link is always a review, and Review needs the link anyway.
+			if (!message || findPullRequestLink(message)) {
+				return { mode: detectAgentMode(message), source: 'rules' };
+			}
+			try {
+				const mode = await classifyMode({
+					text: message,
+					apiKey: await getApiKey(),
+					signal: AbortSignal.timeout(CLASSIFY_TIMEOUT_MS)
+				});
+				return { mode, source: 'ai' };
+			} catch {
+				return { mode: detectAgentMode(message), source: 'rules' };
+			}
+		},
 
 		async listTemplates() {
 			return [...(await store.read()).templates].sort((a, b) => a.name.localeCompare(b.name));

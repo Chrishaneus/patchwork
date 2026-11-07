@@ -6,7 +6,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { applyLegacyEnv, migrateDataDir } from '../engine/env';
-import { createEngine, handleEngineCall, type SecretStore } from '../engine/index';
+import { classifyByRules, createEngine, handleEngineCall, type SecretStore } from '../engine/index';
 import { createTestAgent } from '../engine/test-agent';
 
 applyLegacyEnv();
@@ -111,7 +111,8 @@ function registerIpc() {
 		// End-to-end tests use a scripted agent instead of the real model.
 		runAgent: process.env.PATCHWORK_TEST_AGENT
 			? createTestAgent(process.env.PATCHWORK_TEST_AGENT)
-			: undefined
+			: undefined,
+		classifyMode: process.env.PATCHWORK_TEST_AGENT ? classifyByRules : undefined
 	});
 
 	// Push task updates and log lines to every window.

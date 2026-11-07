@@ -8,6 +8,8 @@
  * serializable (plain JSON) and free of Node or browser imports.
  */
 
+import type { AgentMode } from '../agent-mode.js';
+
 export type GitProvider = 'github' | 'gitlab' | 'bitbucket' | 'other';
 
 export interface Repository {
@@ -528,6 +530,11 @@ export interface EngineApi {
 	startExplore(input: { repositoryIds: string[]; idea: string }): Promise<Run>;
 	/** Ask a question about the code, read-only; the answer is the task's summary. */
 	startAsk(input: { repositoryIds: string[]; question: string }): Promise<Run>;
+	/**
+	 * Auto mode: which workflow a first message asks for, decided by a small model. `source` is
+	 * `rules` when the keyword rules answered instead (a pull request link, or no model available).
+	 */
+	classifyMessage(input: { text: string }): Promise<{ mode: AgentMode; source: 'ai' | 'rules' }>;
 
 	getSettings(input: Record<string, never>): Promise<Settings>;
 	updateSettings(input: SettingsUpdate): Promise<Settings>;
@@ -572,6 +579,7 @@ export const engineMethods: readonly EngineMethod[] = [
 	'postReview',
 	'startExplore',
 	'startAsk',
+	'classifyMessage',
 	'getSettings',
 	'updateSettings'
 ];
