@@ -1,19 +1,19 @@
 <script lang="ts">
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/shared/Markdown.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { Path } from '$app/types';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import ChecksBadge from '#lib/components/ChecksBadge.svelte';
-	import DiffView from '#lib/components/DiffView.svelte';
-	import ExplorationReport from '#lib/components/ExplorationReport.svelte';
-	import ReviewReport from '#lib/components/ReviewReport.svelte';
-	import FollowUpForm from '#lib/components/FollowUpForm.svelte';
-	import PublishDialog from '#lib/components/PublishDialog.svelte';
-	import PullRequestLink from '#lib/components/PullRequestLink.svelte';
-	import TaskLog from '#lib/components/TaskLog.svelte';
-	import TaskStatusBadge from '#lib/components/TaskStatusBadge.svelte';
+	import ChecksBadge from '#lib/components/runs/ChecksBadge.svelte';
+	import DiffView from '#lib/components/runs/DiffView.svelte';
+	import ExplorationReport from '#lib/components/explore/ExplorationReport.svelte';
+	import ReviewReport from '#lib/components/reviews/ReviewReport.svelte';
+	import FollowUpForm from '#lib/components/runs/FollowUpForm.svelte';
+	import PublishDialog from '#lib/components/runs/PublishDialog.svelte';
+	import PullRequestLink from '#lib/components/runs/PullRequestLink.svelte';
+	import TaskLog from '#lib/components/runs/TaskLog.svelte';
+	import TaskStatusBadge from '#lib/components/runs/TaskStatusBadge.svelte';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
@@ -27,11 +27,11 @@
 		type Task
 	} from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
-	import { formatCost } from '#lib/format.js';
+	import { formatCost } from '#lib/components/shared/format.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
-	import { approachInstruction } from '#lib/approach.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import { approachInstruction } from '#lib/components/explore/approach.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let {
 		task,

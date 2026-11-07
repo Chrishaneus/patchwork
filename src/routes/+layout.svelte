@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { ModeWatcher } from 'mode-watcher';
-	import AppSidebar from '#lib/components/AppSidebar.svelte';
+	import AppSidebar from '#lib/components/app/AppSidebar.svelte';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
 	import { getLocale, getTextDirection } from '#lib/paraglide/runtime.js';

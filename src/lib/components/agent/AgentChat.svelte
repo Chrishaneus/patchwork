@@ -6,16 +6,16 @@
 	import GitPullRequestArrow from '@lucide/svelte/icons/git-pull-request-arrow';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
-	import AgentComposer from '#lib/components/AgentComposer.svelte';
-	import AgentThread from '#lib/components/AgentThread.svelte';
-	import ExplorationReport from '#lib/components/ExplorationReport.svelte';
-	import ReviewReport from '#lib/components/ReviewReport.svelte';
-	import { approachInstruction } from '#lib/approach.js';
-	import MobilePanel from '#lib/components/MobilePanel.svelte';
-	import TaskStatusBadge from '#lib/components/TaskStatusBadge.svelte';
+	import AgentComposer from '#lib/components/agent/AgentComposer.svelte';
+	import AgentThread from '#lib/components/agent/AgentThread.svelte';
+	import ExplorationReport from '#lib/components/explore/ExplorationReport.svelte';
+	import ReviewReport from '#lib/components/reviews/ReviewReport.svelte';
+	import { approachInstruction } from '#lib/components/explore/approach.js';
+	import MobilePanel from '#lib/components/shared/MobilePanel.svelte';
+	import TaskStatusBadge from '#lib/components/runs/TaskStatusBadge.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
-	import { buildThread } from '#lib/agent-thread.js';
+	import { buildThread } from '#lib/components/agent/agent-thread.js';
 	import type { EngineClient } from '#lib/engine/client.js';
 	import {
 		activeTaskStatuses,
@@ -27,7 +27,7 @@
 	import { engineErrorMessage } from '#lib/engine/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let { run, runs, client }: { run: Run; runs: RunsState; client: EngineClient } = $props();
 

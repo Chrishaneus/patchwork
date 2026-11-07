@@ -9,26 +9,26 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import MessageCircleQuestion from '@lucide/svelte/icons/message-circle-question';
 	import MessagesSquare from '@lucide/svelte/icons/messages-square';
-	import AgentComposer from '#lib/components/AgentComposer.svelte';
+	import AgentComposer from '#lib/components/agent/AgentComposer.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import MobilePanel from '#lib/components/MobilePanel.svelte';
-	import PullRequestPicker from '#lib/components/PullRequestPicker.svelte';
-	import RepositoryPicker from '#lib/components/RepositoryPicker.svelte';
-	import ReviewAttributePicker from '#lib/components/ReviewAttributePicker.svelte';
-	import TemplatePicker from '#lib/components/TemplatePicker.svelte';
+	import MobilePanel from '#lib/components/shared/MobilePanel.svelte';
+	import PullRequestPicker from '#lib/components/reviews/PullRequestPicker.svelte';
+	import RepositoryPicker from '#lib/components/repositories/RepositoryPicker.svelte';
+	import ReviewAttributePicker from '#lib/components/reviews/ReviewAttributePicker.svelte';
+	import TemplatePicker from '#lib/components/templates/TemplatePicker.svelte';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
-	import { detectAgentMode, findPullRequestLink, type AgentMode } from '#lib/agent-mode.js';
+	import { detectAgentMode, findPullRequestLink, type AgentMode } from '#lib/engine/agent-mode.js';
 	import type { EngineClient } from '#lib/engine/client.js';
 	import { EngineError, type EngineErrorCode, type ReviewAttribute } from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
-	import type { RepositoriesState } from '#lib/repositories.svelte.js';
-	import { RepositoryChoices } from '#lib/repository-choices.svelte.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RepositoriesState } from '#lib/app/repositories.svelte.js';
+	import { RepositoryChoices } from '#lib/components/repositories/repository-choices.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let {
 		repositories,

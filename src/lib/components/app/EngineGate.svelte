@@ -1,12 +1,12 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import AccessTokenForm from '#lib/components/AccessTokenForm.svelte';
-	import EngineUnavailableNotice from '#lib/components/EngineUnavailableNotice.svelte';
+	import AccessTokenForm from '#lib/components/app/AccessTokenForm.svelte';
+	import EngineUnavailableNotice from '#lib/components/app/EngineUnavailableNotice.svelte';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
-	import { appEngine } from '#lib/app-engine.svelte.js';
+	import { appEngine } from '#lib/app/app-engine.svelte.js';
 	import type { EngineConnection } from '#lib/engine/client.js';
-	import type { RepositoriesState } from '#lib/repositories.svelte.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RepositoriesState } from '#lib/app/repositories.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	/** Renders its content only once an engine is connected, with the connected state as arguments. */
 	let {

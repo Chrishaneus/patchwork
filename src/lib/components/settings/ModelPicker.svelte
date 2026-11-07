@@ -5,7 +5,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { findModel, modelProviders, type ModelOption } from '#lib/models.js';
+	import { findModel, modelProviders, type ModelOption } from '#lib/engine/models.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	/** Model picker: provider → models, older generations nested, or a custom model ID. */

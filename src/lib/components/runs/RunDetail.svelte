@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import BulkPublishDialog from '#lib/components/BulkPublishDialog.svelte';
-	import EmptyState from '#lib/components/EmptyState.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
-	import TaskCard from '#lib/components/TaskCard.svelte';
-	import { formatRelativeTime } from '#lib/format.js';
+	import BulkPublishDialog from '#lib/components/runs/BulkPublishDialog.svelte';
+	import EmptyState from '#lib/components/shared/EmptyState.svelte';
+	import PageHeader from '#lib/components/shared/PageHeader.svelte';
+	import TaskCard from '#lib/components/runs/TaskCard.svelte';
+	import { formatRelativeTime } from '#lib/components/shared/format.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { RepositoriesState } from '#lib/repositories.svelte.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RepositoriesState } from '#lib/app/repositories.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let {
 		runs,

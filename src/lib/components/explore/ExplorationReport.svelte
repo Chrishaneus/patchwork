@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/shared/Markdown.svelte';
 	import Hammer from '@lucide/svelte/icons/hammer';
 	import Lightbulb from '@lucide/svelte/icons/lightbulb';
 	import * as Alert from '#lib/components/ui/alert/index.js';

@@ -8,10 +8,10 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { activeTaskStatuses } from '#lib/engine/contract.js';
-	import { formatRelativeTime } from '#lib/format.js';
+	import { formatRelativeTime } from '#lib/components/shared/format.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let { runs, currentId }: { runs: RunsState; currentId?: string } = $props();
 	const href = (path: string) => resolve(localizeHref(path) as Path);

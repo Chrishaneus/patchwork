@@ -6,7 +6,7 @@
 	import { ScrollArea } from '#lib/components/ui/scroll-area/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { RepositoryChoices } from '#lib/repository-choices.svelte.js';
+	import type { RepositoryChoices } from '#lib/components/repositories/repository-choices.svelte.js';
 
 	/** Pick repositories to run a change on: search, select shown, clear. */
 	let {

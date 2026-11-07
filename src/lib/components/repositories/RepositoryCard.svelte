@@ -5,7 +5,7 @@
 	import GitBranch from '@lucide/svelte/icons/git-branch';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import CheckCommandEditor from '#lib/components/CheckCommandEditor.svelte';
+	import CheckCommandEditor from '#lib/components/repositories/CheckCommandEditor.svelte';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';

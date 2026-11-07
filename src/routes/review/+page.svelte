@@ -1,5 +1,5 @@
 <script lang="ts">
-	import AgentRedirect from '#lib/components/AgentRedirect.svelte';
+	import AgentRedirect from '#lib/components/agent/AgentRedirect.svelte';
 </script>
 
 <AgentRedirect mode="review" />

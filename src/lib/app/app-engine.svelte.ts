@@ -1,6 +1,6 @@
 import { connectEngine, type EngineConnection } from '#lib/engine/client.js';
-import { RepositoriesState } from '#lib/repositories.svelte.js';
-import { RunsState } from '#lib/runs.svelte.js';
+import { RepositoriesState } from '#lib/app/repositories.svelte.js';
+import { RunsState } from '#lib/app/runs.svelte.js';
 
 const TOKEN_KEY = 'patchwork.token';
 

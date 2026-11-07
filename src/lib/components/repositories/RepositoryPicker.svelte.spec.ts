@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { RepositoryChoices } from '#lib/repository-choices.svelte.js';
+import type { RepositoryChoices } from '#lib/components/repositories/repository-choices.svelte.js';
 import RepositoryPicker from './RepositoryPicker.svelte';
 
 const repo = (name: string) => ({ id: name, name, detail: `acme/${name}`, onFirstRun: false });

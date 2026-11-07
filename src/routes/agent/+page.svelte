@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { parseAgentMode } from '#lib/agent-mode.js';
-	import AgentRecent from '#lib/components/AgentRecent.svelte';
-	import AgentStart from '#lib/components/AgentStart.svelte';
-	import EngineGate from '#lib/components/EngineGate.svelte';
+	import { parseAgentMode } from '#lib/engine/agent-mode.js';
+	import AgentRecent from '#lib/components/agent/AgentRecent.svelte';
+	import AgentStart from '#lib/components/agent/AgentStart.svelte';
+	import EngineGate from '#lib/components/app/EngineGate.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 </script>
 

@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { Path } from '$app/types';
-	import type { AgentMode } from '#lib/agent-mode.js';
+	import type { AgentMode } from '#lib/engine/agent-mode.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
 
 	/** Old workflow pages (New change, Review PR, Explore) now open the Agent in that mode. */

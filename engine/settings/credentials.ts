@@ -1,4 +1,4 @@
-import type { AgentProvider } from '#lib/models.js';
+import type { AgentProvider } from '#lib/engine/models.js';
 import type { SecretStore } from '../core/secrets.js';
 
 /** Names of the saved secrets. */

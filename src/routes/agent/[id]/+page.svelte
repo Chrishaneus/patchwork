@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import AgentChat from '#lib/components/AgentChat.svelte';
-	import AgentRecent from '#lib/components/AgentRecent.svelte';
-	import EmptyState from '#lib/components/EmptyState.svelte';
-	import EngineGate from '#lib/components/EngineGate.svelte';
-	import { appEngine } from '#lib/app-engine.svelte.js';
+	import AgentChat from '#lib/components/agent/AgentChat.svelte';
+	import AgentRecent from '#lib/components/agent/AgentRecent.svelte';
+	import EmptyState from '#lib/components/shared/EmptyState.svelte';
+	import EngineGate from '#lib/components/app/EngineGate.svelte';
+	import { appEngine } from '#lib/app/app-engine.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	const id = $derived(page.params.id ?? '');

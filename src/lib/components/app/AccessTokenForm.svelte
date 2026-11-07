@@ -4,7 +4,7 @@
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import { appEngine } from '#lib/app-engine.svelte.js';
+	import { appEngine } from '#lib/app/app-engine.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let token = $state('');

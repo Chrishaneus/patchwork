@@ -8,7 +8,7 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { ScrollArea } from '#lib/components/ui/scroll-area/index.js';
-	import FolderBrowserDialog from '#lib/components/FolderBrowserDialog.svelte';
+	import FolderBrowserDialog from '#lib/components/repositories/FolderBrowserDialog.svelte';
 	import type { EngineClient } from '#lib/engine/client.js';
 	import type {
 		EngineErrorCode,

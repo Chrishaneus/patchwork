@@ -6,7 +6,7 @@
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import type { Task } from '#lib/engine/contract.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let { task, runs }: { task: Task; runs: RunsState } = $props();
 

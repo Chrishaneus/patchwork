@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { Path } from '$app/types';
-	import PageHeader from '#lib/components/PageHeader.svelte';
+	import PageHeader from '#lib/components/shared/PageHeader.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
-	import { appEngine } from '#lib/app-engine.svelte.js';
+	import { appEngine } from '#lib/app/app-engine.svelte.js';
 
 	// Load counts as soon as an engine is connected (on the server that happens after the first paint).
 	$effect(() => {

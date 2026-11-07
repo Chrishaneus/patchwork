@@ -1,12 +1,12 @@
 <script lang="ts">
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/shared/Markdown.svelte';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Wrench from '@lucide/svelte/icons/wrench';
 	import type { Snippet } from 'svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { ScrollArea } from '#lib/components/ui/scroll-area/index.js';
-	import type { ThreadItem } from '#lib/agent-thread.js';
+	import type { ThreadItem } from '#lib/components/agent/agent-thread.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {

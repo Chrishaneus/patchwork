@@ -313,7 +313,7 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
 - **Codex** ([`agent/codex/`](engine/agent/codex/index.ts)): OpenAI models run in Codex through
   `@openai/codex-sdk`, which starts the bundled `codex` binary. `createAgentRunner`
   ([`agent/agents.ts`](engine/agent/agents.ts)) picks the agent from the model's provider
-  (`providerOf` in `src/lib/models.ts`; custom IDs starting `gpt-`, `o<digit>` or `codex` go to
+  (`providerOf` in `src/lib/engine/models.ts`; custom IDs starting `gpt-`, `o<digit>` or `codex` go to
   Codex).
   - Sandbox: a permissions profile (`default_permissions`) that reads everything but the denied
     files and writes only the writable folders; network through Codex's proxy

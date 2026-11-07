@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { TaskDiff } from '#lib/engine/contract.js';
-	import { splitDiff } from '#lib/format.js';
+	import { splitDiff } from '#lib/components/shared/format.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let { diff }: { diff: TaskDiff } = $props();

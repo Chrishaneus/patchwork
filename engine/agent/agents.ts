@@ -1,4 +1,4 @@
-import { providerOf } from '#lib/models.js';
+import { providerOf } from '#lib/engine/models.js';
 import { createClaudeAgentRunner } from './claude/index.js';
 import { createCodexAgentRunner } from './codex/index.js';
 import type { AgentRunner } from './runner.js';

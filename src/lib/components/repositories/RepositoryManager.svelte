@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import AddRepositoryForm from '#lib/components/AddRepositoryForm.svelte';
-	import EmptyState from '#lib/components/EmptyState.svelte';
-	import RepositoryCard from '#lib/components/RepositoryCard.svelte';
+	import AddRepositoryForm from '#lib/components/repositories/AddRepositoryForm.svelte';
+	import EmptyState from '#lib/components/shared/EmptyState.svelte';
+	import RepositoryCard from '#lib/components/repositories/RepositoryCard.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { EngineConnection } from '#lib/engine/client.js';
 	import type { EngineInfo, GitHubRepository, RepositoryCandidates } from '#lib/engine/contract.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { RepositoriesState } from '#lib/repositories.svelte.js';
+	import type { RepositoriesState } from '#lib/app/repositories.svelte.js';
 
 	let {
 		repositories,

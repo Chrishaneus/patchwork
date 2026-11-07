@@ -1,7 +1,7 @@
 import type { EngineClient } from '#lib/engine/client.js';
 import type { GitHubRepository } from '#lib/engine/contract.js';
 import { m } from '#lib/paraglide/messages.js';
-import type { RepositoriesState } from '#lib/repositories.svelte.js';
+import type { RepositoriesState } from '#lib/app/repositories.svelte.js';
 
 /** One pickable repository: a saved one, or a GitHub repository that isn't added yet. */
 export interface RepositoryChoice {

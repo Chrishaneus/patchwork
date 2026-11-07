@@ -1,7 +1,7 @@
 <script lang="ts">
-	import EngineGate from '#lib/components/EngineGate.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
-	import RunList from '#lib/components/RunList.svelte';
+	import EngineGate from '#lib/components/app/EngineGate.svelte';
+	import PageHeader from '#lib/components/shared/PageHeader.svelte';
+	import RunList from '#lib/components/runs/RunList.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 </script>
 

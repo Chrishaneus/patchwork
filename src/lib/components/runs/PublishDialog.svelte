@@ -9,7 +9,7 @@
 	import type { Task } from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let {
 		task,

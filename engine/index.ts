@@ -12,7 +12,7 @@ import {
 	createMessageClassifier,
 	type ModeClassifier
 } from './agent/classifier.js';
-import { providerOf } from '#lib/models.js';
+import { providerOf } from '#lib/engine/models.js';
 import { createAgentRunner } from './agent/agents.js';
 import type { AgentRunner } from './agent/runner.js';
 import { EngineEvents } from './core/events.js';

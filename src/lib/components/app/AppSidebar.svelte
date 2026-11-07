@@ -9,7 +9,7 @@
 	import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 	import ListChecks from '@lucide/svelte/icons/list-checks';
 	import Settings from '@lucide/svelte/icons/settings';
-	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import ThemeToggle from '#lib/components/app/ThemeToggle.svelte';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
 	import {
 		isNavItemActive,
@@ -17,7 +17,7 @@
 		navItems,
 		type NavGroup,
 		type NavKey
-	} from '#lib/navigation.js';
+	} from '#lib/components/app/navigation.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import {
 		deLocalizeHref,

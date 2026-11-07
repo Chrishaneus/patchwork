@@ -1,6 +1,6 @@
 <script lang="ts">
 	import GitPullRequestArrow from '@lucide/svelte/icons/git-pull-request-arrow';
-	import ChecksBadge from '#lib/components/ChecksBadge.svelte';
+	import ChecksBadge from '#lib/components/runs/ChecksBadge.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -9,7 +9,7 @@
 	import type { Run, Task } from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let { run, runs }: { run: Run; runs: RunsState } = $props();
 

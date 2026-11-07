@@ -8,7 +8,7 @@
  * serializable (plain JSON) and free of Node or browser imports.
  */
 
-import type { AgentMode } from '../agent-mode.js';
+import type { AgentMode } from './agent-mode.js';
 
 export type GitProvider = 'github' | 'gitlab' | 'bitbucket' | 'other';
 

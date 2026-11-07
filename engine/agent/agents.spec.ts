@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { providerOf } from '#lib/models.js';
+import { providerOf } from '#lib/engine/models.js';
 import { createAgentRunner } from './agents';
 import type { AgentRunInput, AgentRunner } from './runner';
 

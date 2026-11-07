@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/shared/Markdown.svelte';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import MessageSquarePlus from '@lucide/svelte/icons/message-square-plus';
 	import Star from '@lucide/svelte/icons/star';

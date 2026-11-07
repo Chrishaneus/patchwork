@@ -2,7 +2,7 @@
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import LogIn from '@lucide/svelte/icons/log-in';
-	import TokenField from '#lib/components/TokenField.svelte';
+	import TokenField from '#lib/components/settings/TokenField.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';

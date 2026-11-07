@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import GitHubSignIn from '#lib/components/GitHubSignIn.svelte';
-	import TemplateSettings from '#lib/components/TemplateSettings.svelte';
-	import ReviewAttributeSettings from '#lib/components/ReviewAttributeSettings.svelte';
-	import ModelPicker from '#lib/components/ModelPicker.svelte';
-	import SettingsSection from '#lib/components/SettingsSection.svelte';
-	import TokenField from '#lib/components/TokenField.svelte';
+	import GitHubSignIn from '#lib/components/settings/GitHubSignIn.svelte';
+	import TemplateSettings from '#lib/components/templates/TemplateSettings.svelte';
+	import ReviewAttributeSettings from '#lib/components/reviews/ReviewAttributeSettings.svelte';
+	import ModelPicker from '#lib/components/settings/ModelPicker.svelte';
+	import SettingsSection from '#lib/components/settings/SettingsSection.svelte';
+	import TokenField from '#lib/components/settings/TokenField.svelte';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
@@ -19,7 +19,7 @@
 		type Settings
 	} from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
-	import { providerOf } from '#lib/models.js';
+	import { providerOf } from '#lib/engine/models.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let { client, events }: { client: EngineClient; events: EngineEventSource } = $props();

@@ -3,17 +3,17 @@
 	import { resolve } from '$app/paths';
 	import type { Path } from '$app/types';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import EmptyState from '#lib/components/EmptyState.svelte';
+	import EmptyState from '#lib/components/shared/EmptyState.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { matchesFilter, matchesSearch, type RunFilter } from '#lib/run-filter.js';
-	import TaskStatusBadge from '#lib/components/TaskStatusBadge.svelte';
+	import { matchesFilter, matchesSearch, type RunFilter } from '#lib/components/runs/run-filter.js';
+	import TaskStatusBadge from '#lib/components/runs/TaskStatusBadge.svelte';
 	import * as Card from '#lib/components/ui/card/index.js';
-	import { formatRelativeTime } from '#lib/format.js';
+	import { formatRelativeTime } from '#lib/components/shared/format.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { RunsState } from '#lib/runs.svelte.js';
+	import type { RunsState } from '#lib/app/runs.svelte.js';
 
 	let { runs }: { runs: RunsState } = $props();
 

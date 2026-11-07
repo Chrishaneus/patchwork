@@ -3,7 +3,7 @@ import {
 	detectAgentMode,
 	findPullRequestLink,
 	type AgentMode
-} from '#lib/agent-mode.js';
+} from '#lib/engine/agent-mode.js';
 import { EngineError } from '#lib/engine/contract.js';
 import { claudeEnv } from './claude/index.js';
 
