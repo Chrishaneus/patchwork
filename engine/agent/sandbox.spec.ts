@@ -4,7 +4,13 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { tempDirs } from '../test-helpers';
 import { noSandboxNote } from './runner';
-import { PACKAGE_REGISTRIES, sandboxSettings, sandboxSupport } from './sandbox';
+import {
+	credentialFiles,
+	PACKAGE_REGISTRIES,
+	sandboxSettings,
+	sandboxSupport,
+	windowsCredentialFiles
+} from './sandbox';
 
 const dirs = tempDirs();
 const PATH = process.env.PATH;
@@ -48,6 +54,91 @@ describe('sandboxSupport', () => {
 		process.env.PATH = [binDir(['bwrap'], 1), binDir(['socat'])].join(path.delimiter);
 		expect(sandboxSupport('linux')).toEqual({ available: false, missing: [], blocked: true });
 		expect(noSandboxNote(sandboxSupport('linux'))).toMatch(/compose\.yaml/);
+	});
+});
+
+describe('credentialFiles', () => {
+	it('finds the stores where Linux tools keep them, following XDG_CONFIG_HOME', () => {
+		expect(credentialFiles('linux', {}, '/home/me')).toEqual([
+			'/home/me/.ssh',
+			'/home/me/.git-credentials',
+			'/home/me/.config/git/credentials',
+			'/home/me/.netrc',
+			'/home/me/.config/gh',
+			'/home/me/.config/glab-cli',
+			'/home/me/.claude/.credentials.json'
+		]);
+		const moved = credentialFiles('linux', { XDG_CONFIG_HOME: '/cfg' }, '/home/me');
+		expect(moved).toEqual(
+			expect.arrayContaining([
+				'/cfg/git/credentials',
+				'/cfg/gh',
+				'/cfg/glab-cli',
+				'/home/me/.config/glab-cli'
+			])
+		);
+	});
+
+	it('uses Application Support for glab on macOS, and ~/.config for gh', () => {
+		const files = credentialFiles('darwin', {}, '/Users/me');
+		expect(files).toEqual(
+			expect.arrayContaining([
+				'/Users/me/.config/gh',
+				'/Users/me/Library/Application Support/glab-cli',
+				'/Users/me/.config/glab-cli'
+			])
+		);
+	});
+
+	it('uses %APPDATA% and Windows paths on Windows', () => {
+		const files = credentialFiles(
+			'win32',
+			{ APPDATA: 'C:\\Users\\me\\AppData\\Roaming' },
+			'C:\\Users\\me'
+		);
+		expect(files).toEqual(
+			expect.arrayContaining([
+				'C:\\Users\\me\\.ssh',
+				'C:\\Users\\me\\_netrc',
+				'C:\\Users\\me\\AppData\\Roaming\\GitHub CLI',
+				'C:\\Users\\me\\AppData\\Roaming\\glab-cli',
+				'C:\\Users\\me\\.claude\\.credentials.json'
+			])
+		);
+	});
+
+	it('follows the tools’ own config folder variables', () => {
+		const files = credentialFiles(
+			'linux',
+			{ GH_CONFIG_DIR: '/gh', GLAB_CONFIG_DIR: '/glab', CLAUDE_CONFIG_DIR: '/claude' },
+			'/home/me'
+		);
+		expect(files).toEqual(expect.arrayContaining(['/gh', '/glab', '/claude/.credentials.json']));
+		expect(files).not.toContain('/home/me/.config/gh');
+	});
+});
+
+describe('windowsCredentialFiles', () => {
+	it('protects the Windows profiles mounted under WSL, as POSIX paths', () => {
+		const users = dirs.make('patchwork-users-');
+		for (const name of ['Christian', 'Public', 'Default']) mkdirSync(path.join(users, name));
+		const files = windowsCredentialFiles({ wsl: true, usersDir: users });
+		expect(files).toEqual(
+			expect.arrayContaining([
+				`${users}/Christian/.ssh`,
+				`${users}/Christian/.git-credentials`,
+				`${users}/Christian/AppData/Roaming/GitHub CLI`,
+				`${users}/Christian/.claude/.credentials.json`
+			])
+		);
+		expect(files.some((f) => f.includes('/Public/') || f.includes('/Default/'))).toBe(false);
+		expect(files.every((f) => !f.includes('\\'))).toBe(true);
+	});
+
+	it('is empty outside WSL', () => {
+		const users = dirs.make('patchwork-users-');
+		mkdirSync(path.join(users, 'Christian'));
+		expect(windowsCredentialFiles({ wsl: false, usersDir: users })).toEqual([]);
 	});
 });
 

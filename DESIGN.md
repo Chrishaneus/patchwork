@@ -293,7 +293,11 @@ Built in M2 ([`engine/agent/runner.ts`](engine/agent/runner.ts)):
   - network only to package registries (`PACKAGE_REGISTRIES`), strictly; GitHub and GitLab are
     not on the list, so a token couldn't be used even if one leaked;
   - the app's tokens and the Anthropic key are withheld from the environment, and SSH keys, git
-    and CLI credentials and the app's `secrets.json` are unreadable;
+    and CLI credentials and the app's `secrets.json` are unreadable. `credentialFiles` finds them
+    where each tool keeps them per platform (`%APPDATA%`, Application Support, `XDG_CONFIG_HOME`,
+    `GH_CONFIG_DIR` and the like). Under WSL the Windows profiles in `/mnt/c/Users` are covered
+    too; Windows programs can't be started from inside the sandbox (WSL interop needs a socket
+    it blocks), and the Windows drives are read-only;
   - no way out: `allowUnsandboxedCommands: false`, and Bash still goes through the policy.
   - `sandboxSupport` checks for the tools and that bubblewrap may create namespaces. Where it
     can't run (Windows, missing tools, Docker without `seccomp=unconfined`), commands run

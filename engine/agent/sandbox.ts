@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, readFileSync } from 'node:fs';
+import { accessSync, constants, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { SandboxSettings } from '@anthropic-ai/claude-agent-sdk';
@@ -33,16 +33,84 @@ export const PACKAGE_REGISTRIES = [
 	'deno.land'
 ];
 
-/** Credential stores in the home folder the agent's commands must not read (git, SSH, CLIs). */
-const CREDENTIAL_FILES = [
-	'.ssh',
-	'.git-credentials',
-	'.config/git/credentials',
-	'.netrc',
-	'.config/gh',
-	'.config/glab-cli',
-	'.claude/.credentials.json'
-];
+/**
+ * Credential stores the agent's commands must not read: SSH keys, git's stored passwords, and the
+ * GitHub CLI (gh), GitLab CLI (glab) and Claude Code logins. Each is where that tool looks for it on this platform,
+ * including when an environment variable has moved it. Stores in the system keychain (macOS
+ * Keychain, Windows Credential Manager) aren't files and aren't listed.
+ */
+export function credentialFiles(
+	platform: NodeJS.Platform = process.platform,
+	env: NodeJS.ProcessEnv = process.env,
+	home: string = homedir(),
+	/** How to join paths; WSL reads a Windows profile through POSIX paths under /mnt. */
+	p: path.PlatformPath = platform === 'win32' ? path.win32 : path.posix
+): string[] {
+	const windows = platform === 'win32';
+	const xdgConfig = env.XDG_CONFIG_HOME || null;
+	const dotConfig = p.join(home, '.config');
+	const config = xdgConfig ?? dotConfig;
+	const appData = windows
+		? (env.APPDATA ?? p.join(home, 'AppData', 'Roaming'))
+		: platform === 'darwin'
+			? p.join(home, 'Library', 'Application Support')
+			: config;
+
+	const githubCliDir = () => {
+		if (env.GH_CONFIG_DIR) return env.GH_CONFIG_DIR;
+		if (xdgConfig) return p.join(xdgConfig, 'gh');
+		return windows ? p.join(appData, 'GitHub CLI') : p.join(dotConfig, 'gh');
+	};
+	// Older GitLab CLI versions used ~/.config on every platform.
+	const gitlabCliDirs = env.GLAB_CONFIG_DIR
+		? [env.GLAB_CONFIG_DIR]
+		: [p.join(appData, 'glab-cli'), p.join(dotConfig, 'glab-cli')];
+	const claudeDir = env.CLAUDE_CONFIG_DIR || p.join(home, '.claude');
+
+	const files = [
+		p.join(home, '.ssh'),
+		p.join(home, '.git-credentials'),
+		p.join(config, 'git', 'credentials'),
+		p.join(home, '.netrc'),
+		...(windows ? [p.join(home, '_netrc')] : []),
+		githubCliDir(),
+		...gitlabCliDirs,
+		p.join(claudeDir, '.credentials.json')
+	];
+	return [...new Set(files)];
+}
+
+const WINDOWS_SHARED_PROFILES = ['all users', 'default', 'default user', 'public'];
+
+function isWsl() {
+	if (process.env.WSL_DISTRO_NAME) return true;
+	try {
+		return /microsoft/i.test(readFileSync('/proc/version', 'utf8'));
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Under WSL the Windows drives are mounted (/mnt/c), so the Windows profiles' credential stores
+ * are readable from Linux too. Their files, as POSIX paths; none outside WSL.
+ */
+export function windowsCredentialFiles(opts: { wsl?: boolean; usersDir?: string } = {}): string[] {
+	const { wsl = isWsl(), usersDir = '/mnt/c/Users' } = opts;
+	if (!wsl) return [];
+	let profiles: string[];
+	try {
+		profiles = readdirSync(usersDir, { withFileTypes: true })
+			.filter((d) => d.isDirectory() && !WINDOWS_SHARED_PROFILES.includes(d.name.toLowerCase()))
+			.map((d) => path.posix.join(usersDir, d.name));
+	} catch {
+		return [];
+	}
+	return profiles.flatMap((home) => {
+		const appData = path.posix.join(home, 'AppData', 'Roaming');
+		return credentialFiles('win32', { APPDATA: appData }, home, path.posix);
+	});
+}
 
 export type SandboxSupport = {
 	available: boolean;
@@ -105,6 +173,11 @@ function worktreeGitDir(cwd: string): string | null {
  */
 export function sandboxSettings(opts: { cwd: string; protectedFiles: string[] }): SandboxSettings {
 	const gitDir = worktreeGitDir(opts.cwd);
+	const deniedFiles = [
+		...credentialFiles(),
+		...(process.platform === 'linux' ? windowsCredentialFiles() : []),
+		...opts.protectedFiles
+	];
 	return {
 		enabled: true,
 		// Bash still goes through the tool policy as well.
@@ -114,10 +187,7 @@ export function sandboxSettings(opts: { cwd: string; protectedFiles: string[] })
 		filesystem: { allowWrite: gitDir ? [gitDir] : [] },
 		credentials: {
 			envVars: SECRET_ENV.map((name) => ({ name, mode: 'deny' as const })),
-			files: [
-				...CREDENTIAL_FILES.map((file) => path.join(homedir(), file)),
-				...opts.protectedFiles
-			].map((file) => ({ path: file, mode: 'deny' as const }))
+			files: deniedFiles.map((file) => ({ path: file, mode: 'deny' as const }))
 		}
 	};
 }
