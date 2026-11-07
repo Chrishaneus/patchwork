@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # The desktop binary isn't needed to type check, lint or run the unit tests.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run lint
+      # The component tests run in a real browser.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:unit -- --run
