@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import type { TaskChecks } from '#lib/engine/contract.js';
+import type { RunContext } from './context.js';
 
 const MAX_OUTPUT = 16 * 1024;
 
@@ -61,4 +63,45 @@ export function runCheckCommand(opts: {
 			resolve({ exitCode: code, output: output.trimEnd(), stopped });
 		});
 	});
+}
+
+/**
+ * Run the repository's check command in the worktree and record the result on the task.
+ * Resolves to null when the command was stopped (cancel or time limit).
+ */
+export async function performChecks(
+	ctx: RunContext,
+	taskId: string,
+	worktreePath: string,
+	command: string,
+	signal: AbortSignal
+): Promise<TaskChecks | null> {
+	const started: TaskChecks = {
+		status: 'running',
+		command,
+		exitCode: null,
+		output: '',
+		startedAt: new Date().toISOString(),
+		finishedAt: null
+	};
+	await ctx.updateTask(taskId, { status: 'checking', checks: started });
+	ctx.log(taskId, { kind: 'tool', text: `$ ${command}` });
+	const result = await runCheckCommand({ cwd: worktreePath, command, signal });
+	const checks: TaskChecks = {
+		...started,
+		status: !result.stopped && result.exitCode === 0 ? 'passed' : 'failed',
+		exitCode: result.exitCode,
+		output: result.stopped ? `${result.output}\n(stopped)`.trim() : result.output,
+		finishedAt: new Date().toISOString()
+	};
+	await ctx.updateTask(taskId, { checks });
+	if (result.stopped) return null;
+	ctx.log(taskId, {
+		kind: checks.status === 'passed' ? 'info' : 'error',
+		text:
+			checks.status === 'passed'
+				? 'Checks passed.'
+				: `Checks failed (exit code ${result.exitCode ?? 'unknown'}).`
+	});
+	return checks;
 }
