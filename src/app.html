@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="%paraglide.lang%" dir="%paraglide.dir%">
+	<head>
+		<script>
+			// Apply the saved theme before the first paint (dark by default) so the page never
+			// flashes light. Same storage key and logic as mode-watcher, which takes over after.
+			(function () {
+				let mode = 'dark';
+				try {
+					mode = localStorage.getItem('mode-watcher-mode') || 'dark';
+					// Store the default so mode-watcher starts dark too, instead of its own
+					// default ("system") for a moment.
+					localStorage.setItem('mode-watcher-mode', mode);
+				} catch {}
+				const dark =
+					mode === 'dark' ||
+					(mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+				document.documentElement.classList.toggle('dark', dark);
+				document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+			})();
+		</script>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="text-scale" content="scale" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

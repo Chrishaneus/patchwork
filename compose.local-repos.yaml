@@ -1,0 +1,10 @@
+# Optional: let the server also use git repositories in a folder on this machine.
+#   docker compose -f compose.yaml -f compose.local-repos.yaml up --build -d
+# with REPOS_DIR set (in .env) to that folder. It's mounted at /repos; the app (and the agent)
+# can read and write everything in it, so mount the narrowest folder that works.
+services:
+  web:
+    environment:
+      PATCHWORK_REPOS: /repos
+    volumes:
+      - ${REPOS_DIR:?Set REPOS_DIR to the folder to share}:/repos

@@ -1,0 +1,220 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import GitHubSignIn from '#lib/components/GitHubSignIn.svelte';
+	import TemplateSettings from '#lib/components/TemplateSettings.svelte';
+	import ReviewAttributeSettings from '#lib/components/ReviewAttributeSettings.svelte';
+	import ModelPicker from '#lib/components/ModelPicker.svelte';
+	import SettingsSection from '#lib/components/SettingsSection.svelte';
+	import TokenField from '#lib/components/TokenField.svelte';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import type { EngineClient } from '#lib/engine/client.js';
+	import {
+		EngineError,
+		type EngineErrorCode,
+		type EngineEventSource,
+		type Settings
+	} from '#lib/engine/contract.js';
+	import { engineErrorMessage } from '#lib/engine/errors.js';
+	import { m } from '#lib/paraglide/messages.js';
+
+	let { client, events }: { client: EngineClient; events: EngineEventSource } = $props();
+
+	let settings = $state<Settings | null>(null);
+	let model = $state('');
+	let timeoutMinutes = $state(30);
+	let concurrency = $state(2);
+	let apiKey = $state('');
+	let saved = $state<'ai' | 'key' | null>(null);
+	let error = $state<EngineErrorCode | null>(null);
+
+	onMount(async () => {
+		apply(await client.getSettings({}));
+	});
+
+	function apply(next: Settings) {
+		settings = next;
+		model = next.model;
+		timeoutMinutes = next.timeoutMinutes;
+		concurrency = next.concurrency;
+	}
+
+	async function save(
+		section: 'ai' | 'key',
+		update: Parameters<EngineClient['updateSettings']>[0]
+	) {
+		error = null;
+		saved = null;
+		try {
+			apply(await client.updateSettings(update));
+			saved = section;
+			apiKey = '';
+		} catch (e) {
+			error = e instanceof EngineError ? e.code : 'internal';
+		}
+	}
+
+	/** Save a token setting; resolves to whether it worked. */
+	async function saveToken(update: Parameters<EngineClient['updateSettings']>[0]) {
+		error = null;
+		try {
+			apply(await client.updateSettings(update));
+			return true;
+		} catch (e) {
+			error = e instanceof EngineError ? e.code : 'internal';
+			return false;
+		}
+	}
+
+	const keyStatus = $derived(
+		settings?.anthropicApiKey.source === 'saved'
+			? m.settings_key_status_saved()
+			: settings?.anthropicApiKey.source === 'environment'
+				? m.settings_key_status_environment()
+				: m.settings_key_status_none()
+	);
+</script>
+
+{#if settings}
+	<div class="grid gap-8">
+		<SettingsSection
+			id="ai"
+			title={m.settings_ai_title()}
+			description={m.settings_section_ai_description()}
+		>
+			<Card.Root>
+				<Card.Content class="grid gap-6">
+					<form
+						class="grid gap-4 sm:max-w-md"
+						onsubmit={(e) => {
+							e.preventDefault();
+							save('ai', {
+								model,
+								timeoutMinutes: Number(timeoutMinutes),
+								concurrency: Number(concurrency)
+							});
+						}}
+					>
+						<div class="grid gap-2">
+							<Label for="model">{m.settings_model_label()}</Label>
+							<ModelPicker id="model" bind:value={model} />
+						</div>
+						<div class="grid gap-4 sm:grid-cols-2">
+							<div class="grid gap-2">
+								<Label for="timeout">{m.settings_timeout_label()}</Label>
+								<Input id="timeout" type="number" min={1} max={240} bind:value={timeoutMinutes} />
+							</div>
+							<div class="grid gap-2">
+								<Label for="concurrency">{m.settings_concurrency_label()}</Label>
+								<Input id="concurrency" type="number" min={1} max={8} bind:value={concurrency} />
+							</div>
+						</div>
+						<div class="flex items-center gap-3">
+							<Button type="submit">{m.settings_save()}</Button>
+							{#if saved === 'ai'}<span class="text-sm text-muted-foreground" role="status"
+									>{m.settings_saved()}</span
+								>{/if}
+						</div>
+					</form>
+
+					<Separator />
+
+					<form
+						class="grid gap-3 sm:max-w-md"
+						onsubmit={(e) => {
+							e.preventDefault();
+							save('key', { anthropicApiKey: apiKey });
+						}}
+					>
+						<div>
+							<h3 class="text-sm font-medium">{m.settings_key_title()}</h3>
+							<p class="text-xs text-muted-foreground">{m.settings_key_description()}</p>
+						</div>
+						<p class="text-sm" data-testid="key-status">{keyStatus}</p>
+						{#if !settings.anthropicApiKey.encrypted}
+							<p class="text-xs text-muted-foreground">{m.settings_key_unencrypted()}</p>
+						{/if}
+						<div class="grid gap-2">
+							<Label for="api-key">{m.settings_key_label()}</Label>
+							<Input
+								id="api-key"
+								type="password"
+								autocomplete="off"
+								placeholder={m.settings_key_placeholder()}
+								bind:value={apiKey}
+							/>
+						</div>
+						<div class="flex flex-wrap items-center gap-3">
+							<Button type="submit" variant="outline" disabled={!apiKey.trim()}
+								>{m.settings_key_save()}</Button
+							>
+							{#if settings.anthropicApiKey.source === 'saved'}
+								<Button
+									type="button"
+									variant="ghost"
+									onclick={() => save('key', { anthropicApiKey: null })}
+									>{m.settings_key_remove()}</Button
+								>
+							{/if}
+							{#if saved === 'key'}<span class="text-sm text-muted-foreground" role="status"
+									>{m.settings_saved()}</span
+								>{/if}
+						</div>
+					</form>
+				</Card.Content>
+			</Card.Root>
+		</SettingsSection>
+
+		<SettingsSection
+			id="git"
+			title={m.settings_section_git()}
+			description={m.settings_section_git_description()}
+		>
+			<GitHubSignIn
+				{client}
+				{events}
+				{settings}
+				onSettings={apply}
+				onSaveToken={(token) => saveToken({ githubToken: token })}
+			/>
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>{m.settings_gitlab_title()}</Card.Title>
+					<Card.Description>{m.settings_gitlab_description()}</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					<TokenField
+						id="gitlab"
+						placeholder={m.settings_gitlab_placeholder()}
+						tokenState={settings.gitlabToken}
+						environmentLabel={m.settings_gitlab_status_environment()}
+						onSave={(token) => saveToken({ gitlabToken: token })}
+					/>
+				</Card.Content>
+			</Card.Root>
+		</SettingsSection>
+
+		<SettingsSection
+			id="templates"
+			title={m.settings_section_templates()}
+			description={m.settings_section_templates_description()}
+		>
+			<TemplateSettings {client} />
+		</SettingsSection>
+
+		<SettingsSection
+			id="reviews"
+			title={m.settings_section_reviews()}
+			description={m.settings_section_reviews_description()}
+		>
+			<ReviewAttributeSettings {client} />
+		</SettingsSection>
+
+		{#if error}
+			<p role="alert" class="text-sm text-destructive">{engineErrorMessage(error)}</p>
+		{/if}
+	</div>
+{/if}

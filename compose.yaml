@@ -1,0 +1,40 @@
+# Settings come from the environment or a .env file next to this file (see .env.example):
+#   WEB_PORT           host port (default 8080)
+#   WEB_BIND           host address to listen on (default 127.0.0.1, this machine only)
+#   PATCHWORK_TOKEN      access token; required before exposing the server to other machines
+#   PATCHWORK_GITHUB_CLIENT_ID  GitHub App client ID for "Sign in with GitHub" (or set it in Settings)
+#   ANTHROPIC_API_KEY  API key for the agent (or save one on the Settings page)
+#   GITHUB_TOKEN       token for pull requests and HTTPS pushes, instead of signing in
+#   GITLAB_TOKEN       the same for GitLab merge requests (api scope)
+#   GIT_NAME, GIT_EMAIL  author of the commits the app makes
+#
+# Repositories are added by URL and cloned into the private /data volume. To also let the server
+# use folders from this machine, add compose.local-repos.yaml (see that file).
+name: patchwork
+
+services:
+  web:
+    build: .
+    ports:
+      - '${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:3000'
+    # Run as your user so files the app creates are yours.
+    user: '${UID:-1000}:${GID:-1000}'
+    environment:
+      PATCHWORK_TOKEN: ${PATCHWORK_TOKEN:-}
+      PATCHWORK_ALLOWED_HOSTS: ${PATCHWORK_ALLOWED_HOSTS:-}
+      PATCHWORK_GITHUB_CLIENT_ID: ${PATCHWORK_GITHUB_CLIENT_ID:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PATCHWORK_GITHUB_API_URL: ${PATCHWORK_GITHUB_API_URL:-}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
+      PATCHWORK_GITLAB_API_URL: ${PATCHWORK_GITLAB_API_URL:-}
+      GIT_AUTHOR_NAME: ${GIT_NAME:-}
+      GIT_AUTHOR_EMAIL: ${GIT_EMAIL:-}
+      GIT_COMMITTER_NAME: ${GIT_NAME:-}
+      GIT_COMMITTER_EMAIL: ${GIT_EMAIL:-}
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
+volumes:
+  data:

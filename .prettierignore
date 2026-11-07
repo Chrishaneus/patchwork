@@ -1,0 +1,25 @@
+# Package Managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Miscellaneous
+/static/
+
+# Paraglide / inlang generated
+/project.inlang/
+/src/lib/paraglide/
+
+# Capacitor native projects
+/android/
+/ios/
+
+# Electron Forge output
+/out/
+/dist-electron/
+/dist-server/
+/.data/
+/.e2e/
+/.sandbox/

@@ -1,0 +1,17 @@
+.data
+.e2e
+.env
+.env.*
+.git
+.svelte-kit
+.vscode
+android
+build
+dist-electron
+dist-server
+ios
+node_modules
+out
+src/lib/paraglide
+test-results
+.sandbox
