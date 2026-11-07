@@ -354,7 +354,6 @@
 	"settings_model_custom_hint": "Any model ID the Claude Agent SDK accepts. Other providers need their own agent and aren't supported yet.",
 	"nav_agent": "Agent",
 	"agent_title": "Agent",
-	"agent_description": "Pick repositories and work with the agent in a conversation.",
 	"agent_new": "New conversation",
 	"agent_recent": "Recent",
 	"agent_recent_empty": "No conversations yet.",

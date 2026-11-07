@@ -195,7 +195,7 @@
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
 	<!-- The conversation area: what to do, and the message box at the bottom. -->
 	<div
-		class="order-2 flex min-h-[24rem] min-w-0 flex-col gap-3 lg:order-1 lg:h-[calc(100svh-12rem)]"
+		class="order-2 flex min-h-[24rem] min-w-0 flex-col gap-3 lg:order-1 lg:h-[calc(100svh-8rem)]"
 	>
 		<div class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
 			<intro.icon class="size-8 text-muted-foreground" />
@@ -264,7 +264,7 @@
 					: m.agent_review_none()}
 			testid="agent-review-panel"
 			scroll
-			class="order-1 flex flex-col lg:order-2 lg:max-h-[calc(100svh-12rem)]"
+			class="order-1 flex flex-col lg:order-2 lg:max-h-[calc(100svh-8rem)]"
 		>
 			<div class="flex min-h-0 flex-col gap-4 p-3">
 				<div class="flex flex-col gap-2">
@@ -295,7 +295,7 @@
 			title={m.agent_repos()}
 			summary={m.new_change_selected({ count: selected.length })}
 			testid="agent-repositories"
-			class="order-1 flex flex-col lg:order-2 lg:max-h-[calc(100svh-12rem)]"
+			class="order-1 flex flex-col lg:order-2 lg:max-h-[calc(100svh-8rem)]"
 		>
 			<div class="flex min-h-0 flex-col p-3">
 				<p class="hidden text-sm font-medium lg:block">{m.agent_repos()}</p>

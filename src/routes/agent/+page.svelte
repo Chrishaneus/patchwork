@@ -4,11 +4,11 @@
 	import AgentRecent from '#lib/components/AgentRecent.svelte';
 	import AgentStart from '#lib/components/AgentStart.svelte';
 	import EngineGate from '#lib/components/EngineGate.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 </script>
 
-<PageHeader title={m.agent_title()} description={m.agent_description()} />
+<!-- No visible header: the start screen lines up with the conversation it turns into. -->
+<h1 class="sr-only">{m.agent_title()}</h1>
 
 <EngineGate>
 	{#snippet children({ repositories, runs, connection })}
