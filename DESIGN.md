@@ -302,6 +302,11 @@ Built in M2 ([`engine/agent/runner.ts`](engine/agent/runner.ts)):
   - `sandboxSupport` checks for the tools and that bubblewrap may create namespaces. Where it
     can't run (Windows, missing tools, Docker without `seccomp=unconfined`), commands run
     unsandboxed with a note in the task log and in Settings.
+  - The rules are agent-neutral: `sandboxPolicy` returns the writable folders, allowed hosts,
+    denied files and denied environment variables, and each runner enforces them its own way.
+    `claudeSandbox` (in `runner.ts`) turns them into the SDK's `sandbox` option. Another agent
+    would use its own sandbox where it can, or run whole inside `@anthropic-ai/sandbox-runtime`
+    (`srt`) with the same policy.
 - **Prompt:**
   - Your instruction, plus the repository and branch.
   - Asks the agent to follow the repository's conventions and run its checks, not to commit or

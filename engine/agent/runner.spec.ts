@@ -1,5 +1,27 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { agentEnv, isSignInError } from './runner';
+import { agentEnv, claudeSandbox, isSignInError } from './runner';
+
+describe('claudeSandbox', () => {
+	it('enforces the policy with no way around it', () => {
+		const policy = {
+			writable: ['/wt', '/repo/.git/worktrees/task'],
+			allowedDomains: ['registry.npmjs.org'],
+			deniedFiles: ['/home/me/.ssh'],
+			deniedEnv: ['GITHUB_TOKEN']
+		};
+		expect(claudeSandbox(policy, '/wt')).toEqual({
+			enabled: true,
+			autoAllowBashIfSandboxed: false,
+			allowUnsandboxedCommands: false,
+			network: { allowedDomains: ['registry.npmjs.org'], strictAllowlist: true },
+			filesystem: { allowWrite: ['/repo/.git/worktrees/task'] },
+			credentials: {
+				envVars: [{ name: 'GITHUB_TOKEN', mode: 'deny' }],
+				files: [{ path: '/home/me/.ssh', mode: 'deny' }]
+			}
+		});
+	});
+});
 
 describe('isSignInError', () => {
 	it('recognizes a missing login or bad key', () => {

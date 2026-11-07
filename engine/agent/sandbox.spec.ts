@@ -4,13 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { tempDirs } from '../test-helpers';
 import { noSandboxNote } from './runner';
-import {
-	credentialFiles,
-	PACKAGE_REGISTRIES,
-	sandboxSettings,
-	sandboxSupport,
-	windowsCredentialFiles
-} from './sandbox';
+import { credentialFiles, sandboxPolicy, sandboxSupport, windowsCredentialFiles } from './sandbox';
 
 const dirs = tempDirs();
 const PATH = process.env.PATH;
@@ -142,41 +136,29 @@ describe('windowsCredentialFiles', () => {
 	});
 });
 
-describe('sandboxSettings', () => {
+describe('sandboxPolicy', () => {
 	it('keeps commands in the working copy, off GitHub and away from credentials', () => {
 		const cwd = dirs.make('patchwork-wt-');
 		const gitDir = path.join(dirs.make('patchwork-repo-'), '.git', 'worktrees', 'task');
 		mkdirSync(gitDir, { recursive: true });
 		writeFileSync(path.join(cwd, '.git'), `gitdir: ${gitDir}\n`);
 
-		const settings = sandboxSettings({ cwd, protectedFiles: ['/data/secrets.json'] });
-		expect(settings).toMatchObject({
-			enabled: true,
-			autoAllowBashIfSandboxed: false,
-			allowUnsandboxedCommands: false,
-			network: { strictAllowlist: true },
-			filesystem: { allowWrite: [gitDir] }
-		});
-		expect(settings.network?.allowedDomains).toContain('registry.npmjs.org');
+		const policy = sandboxPolicy({ cwd, protectedFiles: ['/data/secrets.json'] });
+		expect(policy.writable).toEqual([cwd, gitDir]);
+		expect(policy.allowedDomains).toContain('registry.npmjs.org');
 		for (const host of ['github.com', 'api.github.com', 'gitlab.com']) {
-			expect(PACKAGE_REGISTRIES).not.toContain(host);
+			expect(policy.allowedDomains).not.toContain(host);
 		}
-		const envVars = settings.credentials?.envVars?.map((v) => [v.name, v.mode]);
-		expect(envVars).toEqual(
-			expect.arrayContaining([
-				['ANTHROPIC_API_KEY', 'deny'],
-				['GITHUB_TOKEN', 'deny'],
-				['GITLAB_TOKEN', 'deny']
-			])
+		expect(policy.deniedEnv).toEqual(
+			expect.arrayContaining(['ANTHROPIC_API_KEY', 'GITHUB_TOKEN', 'GITLAB_TOKEN'])
 		);
-		const files = settings.credentials?.files?.map((f) => f.path);
-		expect(files).toEqual(
+		expect(policy.deniedFiles).toEqual(
 			expect.arrayContaining([path.join(homedir(), '.ssh'), '/data/secrets.json'])
 		);
 	});
 
-	it('allows no extra writes outside a worktree', () => {
-		const settings = sandboxSettings({ cwd: dirs.make(), protectedFiles: [] });
-		expect(settings.filesystem?.allowWrite).toEqual([]);
+	it('allows writes only in the working copy outside a worktree', () => {
+		const cwd = dirs.make();
+		expect(sandboxPolicy({ cwd, protectedFiles: [] }).writable).toEqual([cwd]);
 	});
 });

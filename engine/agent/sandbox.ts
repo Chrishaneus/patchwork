@@ -2,7 +2,6 @@ import { spawnSync } from 'node:child_process';
 import { accessSync, constants, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import type { SandboxSettings } from '@anthropic-ai/claude-agent-sdk';
 import { SECRET_ENV } from '../core/env.js';
 
 /**
@@ -166,28 +165,34 @@ function worktreeGitDir(cwd: string): string | null {
 }
 
 /**
- * The sandbox for the agent's shell commands. They write only in the working copy (and its git
- * folder), connect only to package registries, and see no tokens, keys or credential files, the
- * Anthropic key the agent itself signs in with included. Every command runs inside it; the
- * agent can't ask to run one outside.
+ * What the agent's shell commands may do, whichever agent runs them: each runner turns it into
+ * its own sandbox's settings.
  */
-export function sandboxSettings(opts: { cwd: string; protectedFiles: string[] }): SandboxSettings {
+export type SandboxPolicy = {
+	/** The only folders commands may write to: the working copy and its git folder. */
+	writable: string[];
+	/** The only hosts commands may connect to. */
+	allowedDomains: string[];
+	/** Files and folders commands may not read. */
+	deniedFiles: string[];
+	/** Environment variables commands may not see. */
+	deniedEnv: string[];
+};
+
+/**
+ * The agent's shell commands write only in the working copy, connect only to package registries,
+ * and see no tokens, keys or credential files, the key the agent itself signs in with included.
+ */
+export function sandboxPolicy(opts: { cwd: string; protectedFiles: string[] }): SandboxPolicy {
 	const gitDir = worktreeGitDir(opts.cwd);
-	const deniedFiles = [
-		...credentialFiles(),
-		...(process.platform === 'linux' ? windowsCredentialFiles() : []),
-		...opts.protectedFiles
-	];
 	return {
-		enabled: true,
-		// Bash still goes through the tool policy as well.
-		autoAllowBashIfSandboxed: false,
-		allowUnsandboxedCommands: false,
-		network: { allowedDomains: PACKAGE_REGISTRIES, strictAllowlist: true },
-		filesystem: { allowWrite: gitDir ? [gitDir] : [] },
-		credentials: {
-			envVars: SECRET_ENV.map((name) => ({ name, mode: 'deny' as const })),
-			files: deniedFiles.map((file) => ({ path: file, mode: 'deny' as const }))
-		}
+		writable: gitDir ? [opts.cwd, gitDir] : [opts.cwd],
+		allowedDomains: PACKAGE_REGISTRIES,
+		deniedFiles: [
+			...credentialFiles(),
+			...(process.platform === 'linux' ? windowsCredentialFiles() : []),
+			...opts.protectedFiles
+		],
+		deniedEnv: SECRET_ENV
 	};
 }

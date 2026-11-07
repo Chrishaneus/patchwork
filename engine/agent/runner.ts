@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { CanUseTool, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { CanUseTool, SandboxSettings, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import {
 	EngineError,
 	type LogEntry,
@@ -9,7 +9,12 @@ import {
 } from '#lib/engine/contract.js';
 import { withoutSecrets } from '../core/env.js';
 import { decideToolUse } from './policy.js';
-import { sandboxSettings, sandboxSupport, type SandboxSupport } from './sandbox.js';
+import {
+	sandboxPolicy,
+	sandboxSupport,
+	type SandboxPolicy,
+	type SandboxSupport
+} from './sandbox.js';
 
 const SANDBOX_GUIDANCE = [
 	'Shell commands run in a sandbox: they can write only inside this working copy and reach only',
@@ -24,6 +29,26 @@ export function noSandboxNote(support: SandboxSupport) {
 		: support.blocked
 			? 'Shell commands run without a sandbox: this system doesn’t let bubblewrap create namespaces (in Docker, see compose.yaml).'
 			: 'Shell commands run without a sandbox: it isn’t available on this system.';
+}
+
+/**
+ * The policy as Claude Code's sandbox, which wraps each shell command (bubblewrap on Linux,
+ * Seatbelt on macOS). Every command runs inside it; the agent can't ask to run one outside.
+ */
+export function claudeSandbox(policy: SandboxPolicy, cwd: string): SandboxSettings {
+	return {
+		enabled: true,
+		// Bash still goes through the tool policy as well.
+		autoAllowBashIfSandboxed: false,
+		allowUnsandboxedCommands: false,
+		network: { allowedDomains: policy.allowedDomains, strictAllowlist: true },
+		// Claude Code already lets commands write in the working directory.
+		filesystem: { allowWrite: policy.writable.filter((dir) => dir !== cwd) },
+		credentials: {
+			envVars: policy.deniedEnv.map((name) => ({ name, mode: 'deny' as const })),
+			files: policy.deniedFiles.map((file) => ({ path: file, mode: 'deny' as const }))
+		}
+	};
 }
 
 /**
@@ -201,10 +226,10 @@ export function createClaudeAgentRunner(
 					},
 					...(support.available
 						? {
-								sandbox: sandboxSettings({
-									cwd: input.cwd,
-									protectedFiles: opts.protectedFiles ?? []
-								})
+								sandbox: claudeSandbox(
+									sandboxPolicy({ cwd: input.cwd, protectedFiles: opts.protectedFiles ?? [] }),
+									input.cwd
+								)
 							}
 						: {}),
 					// Load the repository's own CLAUDE.md and project settings, not this machine's.
