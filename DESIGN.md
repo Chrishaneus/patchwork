@@ -135,7 +135,7 @@ ai-tool/
 │   ├── runs/          ← queue, task lifecycle, cancel/timeout, checks, publish, discard;
 │   │                    review/explore/ask prompts and parsing (workflows.ts)
 │   ├── settings/      ← Settings page values, saved credentials, instruction templates
-│   ├── agent/         ← Claude Agent SDK runner, tool policy, Auto-mode classifier, test agent
+│   ├── agent/         ← Claude Code and Codex runners, sandbox, tool policy, classifier, test agent
 │   └── providers/     ← GitHub and GitLab APIs, GitHub sign-in; index.ts picks the provider,
 │                        token and HTTPS push auth
 ├── electron/          ← main.ts, preload.ts (bundled by esbuild to dist-electron/)
@@ -266,12 +266,15 @@ Built in M5:
 
 ## 4. AI agent
 
-Built in M2 ([`engine/agent/runner.ts`](engine/agent/runner.ts)):
+Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent has its own folder
+(`claude/`, `codex/`); [`runner.ts`](engine/agent/runner.ts) holds what they share: the
+`AgentRunner` interface and the guidance both agents are given.
 
 - **SDK:** the **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`), which is Claude Code
   packaged as a library. It runs as a native per-platform binary started by the engine process.
   Docs: https://code.claude.com/docs/en/agent-sdk.
-- **Model:** `claude-opus-5-5` by default, changeable in Settings.
+- **Model:** `claude-opus-5-5` by default, changeable in Settings. Picking an OpenAI model runs
+  Codex instead (see **Codex** below).
 - **Options used:**
   - `cwd` = the worktree;
   - `permissionMode: 'default'`, with `canUseTool` running our policy;
@@ -302,11 +305,33 @@ Built in M2 ([`engine/agent/runner.ts`](engine/agent/runner.ts)):
   - `sandboxSupport` checks for the tools and that bubblewrap may create namespaces. Where it
     can't run (Windows, missing tools, Docker without `seccomp=unconfined`), commands run
     unsandboxed with a note in the task log and in Settings.
-  - The rules are agent-neutral: `sandboxPolicy` returns the writable folders, allowed hosts,
-    denied files and denied environment variables, and each runner enforces them its own way.
-    `claudeSandbox` (in `runner.ts`) turns them into the SDK's `sandbox` option. Another agent
-    would use its own sandbox where it can, or run whole inside `@anthropic-ai/sandbox-runtime`
-    (`srt`) with the same policy.
+  - The rules are agent-neutral: `sandboxPolicy` returns the writable folders (none for the
+    read-only workflows), allowed hosts, denied files and denied environment variables, and each
+    runner enforces them its own way. `claudeSandbox` (in `claude/`) turns them into the SDK's
+    `sandbox` option, `codexSandbox` into Codex's (below). A future agent without a usable
+    sandbox could run whole inside `@anthropic-ai/sandbox-runtime` (`srt`) with the same policy.
+- **Codex** ([`agent/codex/`](engine/agent/codex/index.ts)): OpenAI models run in Codex through
+  `@openai/codex-sdk`, which starts the bundled `codex` binary. `createAgentRunner`
+  ([`agent/agents.ts`](engine/agent/agents.ts)) picks the agent from the model's provider
+  (`providerOf` in `src/lib/models.ts`; custom IDs starting `gpt-`, `o<digit>` or `codex` go to
+  Codex).
+  - Sandbox: a permissions profile (`default_permissions`) that reads everything but the denied
+    files and writes only the writable folders; network through Codex's proxy
+    (`features.network_proxy`, still experimental) with the registries as the only allowed
+    domains; `shell_environment_policy` filters the denied variables out of every command. Codex
+    sandboxes on Linux, macOS and Windows itself, so `sandboxSupport` doesn't apply.
+  - No per-tool hook (`approvalPolicy: 'never'`), so `policy.ts` doesn't run: the sandbox is the
+    whole boundary. Read-only workflows get no writable folders.
+  - Our guidance goes in `developer_instructions`; Codex reads the repository's `AGENTS.md`
+    itself. Commands are logged when they start, because a failed one may never be reported as
+    completed. Codex reports tokens, not dollars, so cost and turns are left empty.
+  - Credentials: a key saved in Settings, then `OPENAI_API_KEY`, then the machine's
+    `codex login` (`~/.codex/auth.json`, which the sandbox denies to both agents).
+  - Verified with a real run (`gpt-6-luna`, ChatGPT login): it fixed a bug in a worktree, the
+    app's `secrets.json` was unreadable, GitHub was refused by the proxy, and in an explore run
+    the worktree was read-only.
+  - The Auto-mode classifier stays a small Claude model; without Claude credentials it falls
+    back to the keyword rules.
 - **Prompt:**
   - Your instruction, plus the repository and branch.
   - Asks the agent to follow the repository's conventions and run its checks, not to commit or

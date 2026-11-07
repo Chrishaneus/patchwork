@@ -12,7 +12,9 @@ import {
 	createMessageClassifier,
 	type ModeClassifier
 } from './agent/classifier.js';
-import { createClaudeAgentRunner, type AgentRunner } from './agent/runner.js';
+import { providerOf } from '#lib/models.js';
+import { createAgentRunner } from './agent/agents.js';
+import type { AgentRunner } from './agent/runner.js';
 import { EngineEvents } from './core/events.js';
 import { TaskLogs } from './core/logs.js';
 import { MemorySecretStore, type SecretStore } from './core/secrets.js';
@@ -42,6 +44,8 @@ export interface EngineOptions {
 	classifyMode?: ModeClassifier;
 	/** Path to the Claude Code binary, when the host must point at it (packaged Electron). */
 	agentExecutable?: string;
+	/** The same for the Codex binary (OpenAI models). */
+	codexExecutable?: string;
 	/** Server mode: folders repositories must live in (e.g. the mounted /repos). */
 	repositoryRoots?: string[];
 	/** Whether local folders may be added (desktop: true; server: only with repositoryRoots). */
@@ -100,12 +104,13 @@ export function createEngine(options: EngineOptions): Engine {
 		worktreesDir: path.join(options.dataDir, 'worktrees'),
 		runAgent:
 			options.runAgent ??
-			createClaudeAgentRunner({
-				executable: options.agentExecutable,
+			createAgentRunner({
+				claudeExecutable: options.agentExecutable,
+				codexExecutable: options.codexExecutable,
 				// Hosts keep saved tokens here (FileSecretStore).
 				protectedFiles: [path.join(options.dataDir, 'secrets.json')]
 			}),
-		getApiKey: credentials.getApiKey,
+		getApiKey: (model) => credentials.getApiKey(providerOf(model)),
 		providers: {
 			githubApiUrl: options.githubApiUrl ?? 'https://api.github.com',
 			gitlabApiUrl: options.gitlabApiUrl,
@@ -134,7 +139,7 @@ export function createEngine(options: EngineOptions): Engine {
 	const classifyMessage = createMessageClassifier({
 		classify:
 			options.classifyMode ?? createClaudeModeClassifier({ executable: options.agentExecutable }),
-		getApiKey: credentials.getApiKey
+		getApiKey: () => credentials.getApiKey('anthropic')
 	});
 
 	// Keep pull request states fresh in the background (merged, closed). The timer doesn't keep

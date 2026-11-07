@@ -183,6 +183,23 @@
 								>{/if}
 						</div>
 					</form>
+
+					<Separator />
+
+					<div class="grid gap-3">
+						<div>
+							<h3 class="text-sm font-medium">{m.settings_openai_key_title()}</h3>
+							<p class="text-xs text-muted-foreground">{m.settings_openai_key_description()}</p>
+						</div>
+						<TokenField
+							id="openai"
+							kind="key"
+							placeholder="sk-…"
+							tokenState={settings.openaiApiKey}
+							environmentLabel={m.settings_openai_key_status_environment()}
+							onSave={(key) => saveToken({ openaiApiKey: key })}
+						/>
+					</div>
 				</Card.Content>
 			</Card.Root>
 		</SettingsSection>

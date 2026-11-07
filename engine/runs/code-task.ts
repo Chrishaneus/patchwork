@@ -94,7 +94,7 @@ export async function executeCodeTask(
 	if (signal.aborted) throw signal.reason;
 
 	await ctx.updateTask(taskId, { status: 'running' });
-	const apiKey = await ctx.deps.getApiKey();
+	const apiKey = await ctx.deps.getApiKey(input.model);
 	// A cancel can land while we were getting ready; don't start the agent then.
 	if (signal.aborted) throw signal.reason;
 	const result = await ctx.deps.runAgent({

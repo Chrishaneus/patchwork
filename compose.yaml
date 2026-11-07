@@ -4,6 +4,7 @@
 #   PATCHWORK_TOKEN      access token; required before exposing the server to other machines
 #   PATCHWORK_GITHUB_CLIENT_ID  GitHub App client ID for "Sign in with GitHub" (or set it in Settings)
 #   ANTHROPIC_API_KEY  API key for the agent (or save one on the Settings page)
+#   OPENAI_API_KEY     the same for Codex, when an OpenAI model is picked
 #   GITHUB_TOKEN       token for pull requests and HTTPS pushes, instead of signing in
 #   GITLAB_TOKEN       the same for GitLab merge requests (api scope)
 #   GIT_NAME, GIT_EMAIL  author of the commits the app makes
@@ -29,6 +30,7 @@ services:
       PATCHWORK_ALLOWED_HOSTS: ${PATCHWORK_ALLOWED_HOSTS:-}
       PATCHWORK_GITHUB_CLIENT_ID: ${PATCHWORK_GITHUB_CLIENT_ID:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       PATCHWORK_GITHUB_API_URL: ${PATCHWORK_GITHUB_API_URL:-}
       GITLAB_TOKEN: ${GITLAB_TOKEN:-}

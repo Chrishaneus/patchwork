@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { tempDirs } from '../test-helpers';
-import { noSandboxNote } from './runner';
+import { noSandboxNote } from './claude/index';
 import { credentialFiles, sandboxPolicy, sandboxSupport, windowsCredentialFiles } from './sandbox';
 
 const dirs = tempDirs();
@@ -60,7 +60,8 @@ describe('credentialFiles', () => {
 			'/home/me/.netrc',
 			'/home/me/.config/gh',
 			'/home/me/.config/glab-cli',
-			'/home/me/.claude/.credentials.json'
+			'/home/me/.claude/.credentials.json',
+			'/home/me/.codex/auth.json'
 		]);
 		const moved = credentialFiles('linux', { XDG_CONFIG_HOME: '/cfg' }, '/home/me');
 		expect(moved).toEqual(
@@ -104,10 +105,17 @@ describe('credentialFiles', () => {
 	it('follows the tools’ own config folder variables', () => {
 		const files = credentialFiles(
 			'linux',
-			{ GH_CONFIG_DIR: '/gh', GLAB_CONFIG_DIR: '/glab', CLAUDE_CONFIG_DIR: '/claude' },
+			{
+				GH_CONFIG_DIR: '/gh',
+				GLAB_CONFIG_DIR: '/glab',
+				CLAUDE_CONFIG_DIR: '/claude',
+				CODEX_HOME: '/codex'
+			},
 			'/home/me'
 		);
-		expect(files).toEqual(expect.arrayContaining(['/gh', '/glab', '/claude/.credentials.json']));
+		expect(files).toEqual(
+			expect.arrayContaining(['/gh', '/glab', '/claude/.credentials.json', '/codex/auth.json'])
+		);
 		expect(files).not.toContain('/home/me/.config/gh');
 	});
 });
@@ -160,5 +168,10 @@ describe('sandboxPolicy', () => {
 	it('allows writes only in the working copy outside a worktree', () => {
 		const cwd = dirs.make();
 		expect(sandboxPolicy({ cwd, protectedFiles: [] }).writable).toEqual([cwd]);
+	});
+
+	it('allows no writes at all for read-only workflows', () => {
+		const cwd = dirs.make();
+		expect(sandboxPolicy({ cwd, protectedFiles: [], readOnly: true }).writable).toEqual([]);
 	});
 });

@@ -20,6 +20,8 @@ export function applyLegacyEnv(env: NodeJS.ProcessEnv = process.env) {
  */
 export const SECRET_ENV = [
 	'ANTHROPIC_API_KEY',
+	'OPENAI_API_KEY',
+	'CODEX_API_KEY',
 	'GITHUB_TOKEN',
 	'GH_TOKEN',
 	'GH_ENTERPRISE_TOKEN',

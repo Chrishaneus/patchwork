@@ -177,13 +177,15 @@ describe('settings', () => {
 			model: 'claude-sonnet-5-5',
 			timeoutMinutes: 10,
 			concurrency: 2,
-			anthropicApiKey: 'sk-test'
+			anthropicApiKey: 'sk-test',
+			openaiApiKey: 'sk-openai-test'
 		});
 		expect(after).toEqual({
 			model: 'claude-sonnet-5-5',
 			timeoutMinutes: 10,
 			concurrency: 2,
 			anthropicApiKey: { source: 'saved', encrypted: true },
+			openaiApiKey: { source: 'saved', encrypted: true },
 			githubToken: expect.objectContaining({ encrypted: true }),
 			gitlabToken: expect.objectContaining({ encrypted: true }),
 			githubClientId: { value: null, source: null },
@@ -196,6 +198,7 @@ describe('settings', () => {
 			}
 		});
 		expect(JSON.stringify(after)).not.toContain('sk-test');
+		expect(JSON.stringify(after)).not.toContain('sk-openai-test');
 
 		await expect(engine.updateSettings({ timeoutMinutes: 0 })).rejects.toMatchObject({
 			code: 'invalid_input'

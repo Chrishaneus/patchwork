@@ -92,6 +92,30 @@ function findAgentExecutable(): string | undefined {
 	}
 }
 
+const CODEX_TARGETS: Record<string, string> = {
+	'linux-x64': 'x86_64-unknown-linux-musl',
+	'linux-arm64': 'aarch64-unknown-linux-musl',
+	'darwin-x64': 'x86_64-apple-darwin',
+	'darwin-arm64': 'aarch64-apple-darwin',
+	'win32-x64': 'x86_64-pc-windows-msvc',
+	'win32-arm64': 'aarch64-pc-windows-msvc'
+};
+
+/** Codex's binary, likewise in a per-platform package and unpacked from the asar archive. */
+function findCodexExecutable(): string | undefined {
+	const key = `${process.platform}-${process.arch}`;
+	const triple = CODEX_TARGETS[key];
+	if (!triple) return undefined;
+	try {
+		const dir = path.dirname(require.resolve(`@openai/codex-${key}/package.json`));
+		const name = process.platform === 'win32' ? 'codex.exe' : 'codex';
+		const binary = path.join(dir, 'vendor', triple, 'bin', name);
+		return binary.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+	} catch {
+		return undefined;
+	}
+}
+
 function registerIpc() {
 	// PATCHWORK_DATA_DIR lets tests and power users keep data somewhere else.
 	const dataDir = process.env.PATCHWORK_DATA_DIR ?? path.join(app.getPath('userData'), 'engine');
@@ -103,6 +127,7 @@ function registerIpc() {
 		dataDir,
 		secrets: createFileSecrets(path.join(dataDir, 'secrets.json')),
 		agentExecutable: findAgentExecutable(),
+		codexExecutable: findCodexExecutable(),
 		// PATCHWORK_GITHUB_API_URL points at GitHub Enterprise or the local fake GitHub (npm run sandbox).
 		githubApiUrl: process.env.PATCHWORK_GITHUB_API_URL || undefined,
 		gitlabApiUrl: process.env.PATCHWORK_GITLAB_API_URL || undefined,

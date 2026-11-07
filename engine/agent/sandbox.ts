@@ -34,7 +34,7 @@ export const PACKAGE_REGISTRIES = [
 
 /**
  * Credential stores the agent's commands must not read: SSH keys, git's stored passwords, and the
- * GitHub CLI (gh), GitLab CLI (glab) and Claude Code logins. Each is where that tool looks for it on this platform,
+ * GitHub CLI (gh), GitLab CLI (glab), Claude Code and Codex logins. Each is where that tool looks for it on this platform,
  * including when an environment variable has moved it. Stores in the system keychain (macOS
  * Keychain, Windows Credential Manager) aren't files and aren't listed.
  */
@@ -65,6 +65,7 @@ export function credentialFiles(
 		? [env.GLAB_CONFIG_DIR]
 		: [p.join(appData, 'glab-cli'), p.join(dotConfig, 'glab-cli')];
 	const claudeDir = env.CLAUDE_CONFIG_DIR || p.join(home, '.claude');
+	const codexDir = env.CODEX_HOME || p.join(home, '.codex');
 
 	const files = [
 		p.join(home, '.ssh'),
@@ -74,7 +75,8 @@ export function credentialFiles(
 		...(windows ? [p.join(home, '_netrc')] : []),
 		githubCliDir(),
 		...gitlabCliDirs,
-		p.join(claudeDir, '.credentials.json')
+		p.join(claudeDir, '.credentials.json'),
+		p.join(codexDir, 'auth.json')
 	];
 	return [...new Set(files)];
 }
@@ -169,7 +171,7 @@ function worktreeGitDir(cwd: string): string | null {
  * its own sandbox's settings.
  */
 export type SandboxPolicy = {
-	/** The only folders commands may write to: the working copy and its git folder. */
+	/** The only folders commands may write to: the working copy and its git folder, or none. */
 	writable: string[];
 	/** The only hosts commands may connect to. */
 	allowedDomains: string[];
@@ -182,11 +184,16 @@ export type SandboxPolicy = {
 /**
  * The agent's shell commands write only in the working copy, connect only to package registries,
  * and see no tokens, keys or credential files, the key the agent itself signs in with included.
+ * Read-only workflows (review, explore, ask) may write nowhere.
  */
-export function sandboxPolicy(opts: { cwd: string; protectedFiles: string[] }): SandboxPolicy {
+export function sandboxPolicy(opts: {
+	cwd: string;
+	protectedFiles: string[];
+	readOnly?: boolean;
+}): SandboxPolicy {
 	const gitDir = worktreeGitDir(opts.cwd);
 	return {
-		writable: gitDir ? [opts.cwd, gitDir] : [opts.cwd],
+		writable: opts.readOnly ? [] : gitDir ? [opts.cwd, gitDir] : [opts.cwd],
 		allowedDomains: PACKAGE_REGISTRIES,
 		deniedFiles: [
 			...credentialFiles(),

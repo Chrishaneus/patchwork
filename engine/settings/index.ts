@@ -30,6 +30,7 @@ export function createSettingsService(opts: {
 			timeoutMinutes: settings.timeoutMinutes,
 			concurrency: settings.concurrency,
 			anthropicApiKey: { source: sources.anthropicApiKey, encrypted },
+			openaiApiKey: { source: sources.openaiApiKey, encrypted },
 			githubToken: { source: sources.githubToken, encrypted },
 			gitlabToken: { source: sources.gitlabToken, encrypted },
 			githubClientId: settings.githubClientId
@@ -68,6 +69,7 @@ export function createSettingsService(opts: {
 			if (update.concurrency !== undefined) data.settings.concurrency = update.concurrency;
 		});
 		if (update.anthropicApiKey !== undefined) await credentials.saveApiKey(update.anthropicApiKey);
+		if (update.openaiApiKey !== undefined) await credentials.saveOpenAiKey(update.openaiApiKey);
 		if (update.concurrency !== undefined) opts.onConcurrencyChange(update.concurrency);
 		if (update.githubToken !== undefined) await credentials.saveGitHubToken(update.githubToken);
 		if (update.gitlabToken !== undefined) await credentials.saveGitLabToken(update.gitlabToken);

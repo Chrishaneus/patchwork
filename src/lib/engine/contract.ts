@@ -334,6 +334,8 @@ export interface Settings {
 	 * saved key is encrypted (false when the system has no keychain).
 	 */
 	anthropicApiKey: { source: 'saved' | 'environment' | null; encrypted: boolean };
+	/** The same for the OpenAI key Codex uses (OpenAI models); without one, `codex login`. */
+	openaiApiKey: { source: 'saved' | 'environment' | null; encrypted: boolean };
 	/** Token used to open pull requests on GitHub (from Settings, or GITHUB_TOKEN / GH_TOKEN). */
 	githubToken: { source: 'saved' | 'environment' | null; encrypted: boolean };
 	/** Token used to open merge requests on GitLab (from Settings, or GITLAB_TOKEN). */
@@ -358,6 +360,8 @@ export interface SettingsUpdate {
 	concurrency?: number;
 	/** A new key to save, or null to delete the saved key. */
 	anthropicApiKey?: string | null;
+	/** A new OpenAI key to save, or null to delete the saved key. */
+	openaiApiKey?: string | null;
 	/** A new GitHub token to save, or null to delete it. */
 	githubToken?: string | null;
 	/** A new GitLab token to save, or null to delete it. */

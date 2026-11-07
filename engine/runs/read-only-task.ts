@@ -90,7 +90,7 @@ export async function executeReadOnlyTask(
 	if (signal.aborted) throw signal.reason;
 
 	await ctx.updateTask(taskId, { status: 'running' });
-	const apiKey = await ctx.deps.getApiKey();
+	const apiKey = await ctx.deps.getApiKey(input.model);
 	if (signal.aborted) throw signal.reason;
 	const original =
 		run.kind === 'review'

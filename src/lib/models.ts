@@ -1,8 +1,10 @@
 /**
- * Models offered in Settings, grouped by provider. The agent is the Claude Agent SDK, so only
- * Anthropic models run today; another provider needs its own agent runner in the engine first.
- * Any other model ID can still be typed in ("Custom model ID…").
+ * Models offered in Settings, grouped by provider. The provider decides the agent: Anthropic
+ * models run in Claude Code, OpenAI models in Codex. Any other model ID can still be typed in
+ * ("Custom model ID…").
  */
+export type AgentProvider = 'anthropic' | 'openai';
+
 export interface ModelOption {
 	id: string;
 	name: string;
@@ -11,7 +13,7 @@ export interface ModelOption {
 }
 
 export interface ModelProvider {
-	id: string;
+	id: AgentProvider;
 	name: string;
 	/** Current models, shown first. */
 	models: ModelOption[];
@@ -44,6 +46,21 @@ export const modelProviders: ModelProvider[] = [
 			{ id: 'claude-opus-4-8', name: 'Claude Opus 4.8', note: 'Older Opus' },
 			{ id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', note: 'Older Haiku' }
 		]
+	},
+	{
+		id: 'openai',
+		name: 'OpenAI (Codex)',
+		models: [
+			{ id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol', note: 'Strong at long coding tasks; paid plans' },
+			{ id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra', note: 'Fast and efficient; paid plans' },
+			{ id: 'gpt-6-luna', name: 'GPT-6 Luna', note: 'Cheapest; on every plan' }
+		],
+		older: [
+			{ id: 'gpt-6-sol', name: 'GPT-6 Sol', note: 'Previous Sol' },
+			{ id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra', note: 'Previous Terra' },
+			{ id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', note: 'Previous Luna' },
+			{ id: 'gpt-5.5', name: 'GPT-5.5', note: 'API keys only' }
+		]
 	}
 ];
 
@@ -54,4 +71,11 @@ export function findModel(id: string): { provider: ModelProvider; model: ModelOp
 		if (model) return { provider, model };
 	}
 	return undefined;
+}
+
+/** Which provider, and so which agent, runs a model; custom IDs go by their name. */
+export function providerOf(model: string): AgentProvider {
+	return (
+		findModel(model)?.provider.id ?? (/^(gpt-|o\d|codex)/i.test(model) ? 'openai' : 'anthropic')
+	);
 }

@@ -20,7 +20,11 @@ const keep = [
 	'/node_modules/@anthropic-ai/claude-agent-sdk',
 	// The agent binary for the system being built for (claude.exe on Windows).
 	`/node_modules/@anthropic-ai/claude-agent-sdk-${platform}-${arch}`,
-	'/node_modules/zod'
+	'/node_modules/zod',
+	// Codex, for OpenAI models: the SDK, the CLI package it resolves, and the native binary.
+	'/node_modules/@openai/codex-sdk',
+	'/node_modules/@openai/codex',
+	`/node_modules/@openai/codex-${platform}-${arch}`
 ];
 
 /** @type {import('@electron-forge/shared-types').ForgeConfig} */
@@ -28,8 +32,11 @@ const config = {
 	packagerConfig: {
 		name: 'Patchwork',
 		executableName: 'patchwork',
-		// Executables can't be started from inside the asar archive, so the agent binary is unpacked.
-		asar: { unpack: '**/node_modules/@anthropic-ai/claude-agent-sdk-*/**' },
+		// Executables can't be started from inside the asar archive, so the agent binaries are unpacked.
+		asar: {
+			unpack:
+				'{**/node_modules/@anthropic-ai/claude-agent-sdk-*/**,**/node_modules/@openai/codex-*-*/**}'
+		},
 		ignore: (file) =>
 			!!file &&
 			!keep.some(

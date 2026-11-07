@@ -18,7 +18,8 @@ export interface RunServiceDeps {
 	events: EngineEvents;
 	runAgent: AgentRunner;
 	worktreesDir: string;
-	getApiKey: () => Promise<string | null>;
+	/** The API key for the agent that runs this model, if one is saved or set. */
+	getApiKey: (model: string) => Promise<string | null>;
 	/** Pull request providers (GitHub, GitLab) and their tokens. */
 	providers: ProviderSettings;
 	/** Clone a repository that was added by URL, if it isn't yet (shared between callers). */

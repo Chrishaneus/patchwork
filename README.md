@@ -63,8 +63,8 @@ docker compose up --build -d
   ```
   Everything in that folder becomes readable and writable by the agent, so share the narrowest
   folder that works.
-- **Agent login:** the container can't use your Claude login. Set `ANTHROPIC_API_KEY` in `.env`,
-  or save a key in Settings.
+- **Agent login:** the container can't use your Claude or Codex login. Set `ANTHROPIC_API_KEY`
+  (or `OPENAI_API_KEY` for Codex) in `.env`, or save a key in Settings.
 - **Commit author:** set `GIT_NAME` and `GIT_EMAIL`, otherwise publishing can't commit.
 - **Updating:** after pulling or changing code, run `docker compose up --build -d` again.
 
@@ -146,18 +146,23 @@ where file edits are blocked, and the copy is removed when it finishes. You can 
 questions afterwards: each one gets a fresh copy, and the agent updates the report if its view
 changed. An updated review can be posted again.
 
-If the agent reports that it isn't signed in, it has no Anthropic credentials. The desktop app
-and local mode can use your Claude login. Docker can't, so add an API key under **Settings → AI
-agent**, or set `ANTHROPIC_API_KEY` before `docker compose up`.
+The agent is Claude Code by default. Pick an OpenAI model under **Settings → AI agent** to run
+tasks in OpenAI's Codex instead.
 
-The agent's shell commands run in Claude Code's sandbox. They can write only in the working copy,
+If the agent reports that it isn't signed in, it has no credentials for that model's provider.
+The desktop app and local mode can use your Claude login (or, for Codex, `codex login`). Docker
+can't, so add an Anthropic or OpenAI API key under **Settings → AI agent**, or set
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY` before `docker compose up`.
+
+The agent's shell commands run in Claude Code's sandbox, or Codex's with the same rules. They can write only in the working copy,
 connect only to package registries (npm, PyPI, crates.io, Maven and the like, not GitHub or
 GitLab), and can't read the app's tokens, its saved secrets, SSH keys or git credentials. So
 pushing and opening pull requests stays with the app, after your review.
 
 - macOS has it built in. On Linux, install `bubblewrap` and `socat`. The Docker image has both,
   and `compose.yaml` relaxes Docker's seccomp filter so bubblewrap can run.
-- Windows has no sandbox. Without one, a warning shows in the task log and under **Settings → AI
+- Codex brings its own sandbox on every system, Windows included.
+- Claude Code has no sandbox on Windows. Without one, a warning shows in the task log and under **Settings → AI
   agent**, and only the command rules (no `git push`, no `gh pr`, …) stand in the way. Those
   rules are easy to get around, so they're a safety net, not a boundary.
 
@@ -227,6 +232,7 @@ npm run clean            # remove build output and test leftovers
 | `PATCHWORK_ALLOWED_HOSTS`                                                          | Extra host names allowed without a token (e.g. a reverse proxy)                      |
 | `PORT`, `HOST`                                                                     | Where the server listens (default `3000`, `0.0.0.0`; local mode `127.0.0.1`)         |
 | `ANTHROPIC_API_KEY`                                                                | Key for the agent, unless one is saved in Settings                                   |
+| `OPENAI_API_KEY`                                                                   | Key for Codex (OpenAI models), unless one is saved in Settings                       |
 | `PATCHWORK_GITHUB_CLIENT_ID`                                                       | GitHub App client ID for "Sign in with GitHub"                                       |
 | `GITHUB_TOKEN`, `GITLAB_TOKEN`                                                     | Tokens for pull requests and private clones, instead of signing in                   |
 | `PATCHWORK_GITHUB_API_URL`, `PATCHWORK_GITHUB_WEB_URL`, `PATCHWORK_GITLAB_API_URL` | GitHub Enterprise, self-hosted GitLab, or the fake servers                           |
