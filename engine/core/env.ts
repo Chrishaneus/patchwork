@@ -14,6 +14,33 @@ export function applyLegacyEnv(env: NodeJS.ProcessEnv = process.env) {
 }
 
 /**
+ * Credentials the app reads from its environment, plus the ones the `gh` and `glab` CLIs pick up.
+ * What runs in a repository (the agent, check commands) never sees them: with a token it could
+ * call the GitHub or GitLab API directly, around the "no push, no pull requests" rules.
+ */
+export const SECRET_ENV = [
+	'ANTHROPIC_API_KEY',
+	'GITHUB_TOKEN',
+	'GH_TOKEN',
+	'GH_ENTERPRISE_TOKEN',
+	'GITHUB_ENTERPRISE_TOKEN',
+	'GITLAB_TOKEN',
+	'GITLAB_ACCESS_TOKEN',
+	'PATCHWORK_TOKEN',
+	'AI_TOOL_TOKEN'
+];
+
+/** This process's environment without `SECRET_ENV`, then `extra` on top. */
+export function withoutSecrets(
+	extra: Record<string, string | undefined> = {},
+	env: NodeJS.ProcessEnv = process.env
+): Record<string, string | undefined> {
+	const result: Record<string, string | undefined> = { ...env };
+	for (const name of SECRET_ENV) delete result[name];
+	return { ...result, ...extra };
+}
+
+/**
  * Move data from its old location (from when the app was "AI Tool") to the new one, once: only
  * when the old folder exists and the new one doesn't. Returns whether anything moved.
  */

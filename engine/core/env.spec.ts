@@ -1,11 +1,31 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyLegacyEnv, migrateDataDir } from './env';
+import { applyLegacyEnv, migrateDataDir, SECRET_ENV, withoutSecrets } from './env';
 import { tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());
+
+describe('withoutSecrets', () => {
+	it("drops the app's tokens and keeps everything else, with extras on top", () => {
+		const env: NodeJS.ProcessEnv = {
+			...Object.fromEntries(SECRET_ENV.map((name) => [name, 'secret'])),
+			PATH: '/usr/bin',
+			HOME: '/home/me'
+		};
+		expect(withoutSecrets({ CI: 'true' }, env)).toEqual({
+			PATH: '/usr/bin',
+			HOME: '/home/me',
+			CI: 'true'
+		});
+		expect(SECRET_ENV).toEqual(
+			expect.arrayContaining(['GITHUB_TOKEN', 'GH_TOKEN', 'GITLAB_TOKEN', 'PATCHWORK_TOKEN'])
+		);
+		// The caller's environment is left alone.
+		expect(env.GITHUB_TOKEN).toBe('secret');
+	});
+});
 
 describe('the rename from AI Tool to Patchwork', () => {
 	it('maps old AI_TOOL_* settings to PATCHWORK_*, without overriding new ones', () => {

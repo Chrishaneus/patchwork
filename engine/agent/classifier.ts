@@ -5,6 +5,7 @@ import {
 	type AgentMode
 } from '#lib/agent-mode.js';
 import { EngineError } from '#lib/engine/contract.js';
+import { agentEnv } from './runner.js';
 
 export interface ClassifyInput {
 	text: string;
@@ -44,11 +45,7 @@ export function createClaudeModeClassifier(
 		if (signal.aborted) abort();
 		else signal.addEventListener('abort', abort, { once: true });
 
-		const env: Record<string, string | undefined> = {
-			...process.env,
-			CLAUDE_AGENT_SDK_CLIENT_APP: 'patchwork/0.0.1'
-		};
-		if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
+		const env = agentEnv(apiKey);
 
 		try {
 			const session = query({

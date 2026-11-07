@@ -1,11 +1,9 @@
 import { spawn } from 'node:child_process';
 import type { TaskChecks } from '#lib/engine/contract.js';
+import { withoutSecrets } from '../core/env.js';
 import type { RunContext } from './context.js';
 
 const MAX_OUTPUT = 16 * 1024;
-
-/** Variables the app itself uses; a repository's check command never needs them. */
-const SECRET_ENV = ['ANTHROPIC_API_KEY', 'GITHUB_TOKEN', 'GH_TOKEN', 'PATCHWORK_TOKEN'];
 
 export interface CheckResult {
 	exitCode: number | null;
@@ -25,8 +23,7 @@ export function runCheckCommand(opts: {
 	signal: AbortSignal;
 }): Promise<CheckResult> {
 	return new Promise((resolve) => {
-		const env: NodeJS.ProcessEnv = { ...process.env, CI: 'true', FORCE_COLOR: '0' };
-		for (const name of SECRET_ENV) delete env[name];
+		const env = withoutSecrets({ CI: 'true', FORCE_COLOR: '0' });
 
 		const windows = process.platform === 'win32';
 		const child = windows

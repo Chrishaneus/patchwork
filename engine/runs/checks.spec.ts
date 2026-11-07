@@ -73,14 +73,13 @@ describe('checks', () => {
 	});
 
 	it("doesn't pass the app's secrets to the check command", async () => {
-		process.env.GITHUB_TOKEN = 'secret-github';
-		process.env.ANTHROPIC_API_KEY = 'secret-anthropic';
+		const names = ['GITHUB_TOKEN', 'GITLAB_TOKEN', 'PATCHWORK_TOKEN', 'ANTHROPIC_API_KEY'];
+		for (const name of names) process.env[name] = `secret-${name}`;
 		try {
-			const { engine, repo } = await setup('echo "[$GITHUB_TOKEN$ANTHROPIC_API_KEY]"');
+			const { engine, repo } = await setup(`echo "[${names.map((n) => `$${n}`).join('')}]"`);
 			expect((await runOnce(engine, repo.id)).checks?.output).toBe('[]');
 		} finally {
-			delete process.env.GITHUB_TOKEN;
-			delete process.env.ANTHROPIC_API_KEY;
+			for (const name of names) delete process.env[name];
 		}
 	});
 

@@ -7,7 +7,19 @@ import {
 	type ReviewAttribute,
 	type RunKind
 } from '#lib/engine/contract.js';
+import { withoutSecrets } from '../core/env.js';
 import { decideToolUse } from './policy.js';
+
+/**
+ * The environment for Claude Code: none of the app's tokens (the agent's shell commands inherit
+ * it), only the Anthropic key the agent signs in with, when there is one.
+ */
+export function agentEnv(apiKey: string | null) {
+	return withoutSecrets({
+		CLAUDE_AGENT_SDK_CLIENT_APP: 'patchwork/0.0.1',
+		...(apiKey ? { ANTHROPIC_API_KEY: apiKey } : {})
+	});
+}
 
 /** The agent couldn't sign in to Anthropic (no API key and no Claude login). */
 export function isSignInError(text: string) {
@@ -145,11 +157,7 @@ export function createClaudeAgentRunner(opts: { executable?: string } = {}): Age
 			return { behavior: 'deny', message: decision.reason };
 		};
 
-		const env: Record<string, string | undefined> = {
-			...process.env,
-			CLAUDE_AGENT_SDK_CLIENT_APP: 'patchwork/0.0.1'
-		};
-		if (input.apiKey) env.ANTHROPIC_API_KEY = input.apiKey;
+		const env = agentEnv(input.apiKey);
 
 		try {
 			const session = query({
