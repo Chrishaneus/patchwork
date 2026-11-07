@@ -191,6 +191,7 @@ npm run test:unit        # Vitest: engine, server, UI state and component tests
 npm run test:e2e         # Playwright in the browser, against real servers and a fake GitHub
 npm run test:electron    # Playwright against the real Electron app
 npm test                 # unit + e2e
+npm run clean            # remove build output and test leftovers
 ```
 
 - **No real services:** tests use a scripted agent (`PATCHWORK_TEST_AGENT=edit|hang`), a fake GitHub

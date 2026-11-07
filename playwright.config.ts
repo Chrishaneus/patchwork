@@ -7,6 +7,8 @@ const server = (port: number, env: string) =>
 export default defineConfig({
 	testMatch: '**/*.e2e.{ts,js}',
 	testIgnore: ['electron/**'],
+	// Runs after the servers below have started.
+	globalSetup: './dev/e2e-setup.ts',
 	webServer: [
 		// A fake GitHub (sign-in, repositories, pull requests) plus the e2e git fixtures.
 		{ command: 'node dev/e2e-github.ts --port 4011', port: 4011, reuseExistingServer: false },
