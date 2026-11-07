@@ -319,7 +319,12 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
     files and writes only the writable folders; network through Codex's proxy
     (`features.network_proxy`, still experimental) with the registries as the only allowed
     domains; `shell_environment_policy` filters the denied variables out of every command. Codex
-    sandboxes on Linux, macOS and Windows itself, so `sandboxSupport` doesn't apply.
+    sandboxes on Linux (a bundled bubblewrap), macOS and Windows itself, so `sandboxSupport`
+    doesn't apply; `codexSandboxSupport` runs one command under a profile like a task's.
+  - Windows: only MXC (Windows 11 24H2+, no admin) and the elevated sandbox can deny reads, so
+    the overrides set `features.prefer_mxc` with `windows.sandbox="elevated"` as the fallback,
+    and `allow_local_binding` for MXC's proxy. When the probe fails there, Settings offers
+    `setUpAgentSandbox`, which runs `codex sandbox setup --elevated --current-user` (UAC).
   - No per-tool hook (`approvalPolicy: 'never'`), so `policy.ts` doesn't run: the sandbox is the
     whole boundary. Read-only workflows get no writable folders.
   - Our guidance goes in `developer_instructions`; Codex reads the repository's `AGENTS.md`

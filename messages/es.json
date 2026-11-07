@@ -460,5 +460,8 @@
 	"settings_sandbox_unsupported": "Los comandos del agente no están aislados: este sistema no lo admite. Solo las reglas de comandos impiden pushes y llamadas a la API.",
 	"settings_sandbox_codex_blocked": "Codex no puede iniciar su entorno aislado en este sistema: no se le permite crear los espacios de nombres que necesita (en Docker, usa el security_opt de compose.yaml; en Ubuntu, AppArmor puede impedirlo). Sus comandos fallarán hasta entonces.",
 	"settings_sandbox_codex_unsupported": "Codex no viene con la app para este sistema, así que los modelos de OpenAI no pueden ejecutarse aquí.",
+	"settings_sandbox_codex_setup": "El entorno aislado de Codex necesita una configuración única en esta versión de Windows (Windows 11 24H2 y posteriores no). Windows pedirá aprobación de administrador. Sus comandos fallarán hasta entonces.",
+	"settings_sandbox_codex_setup_button": "Configurar el entorno aislado",
+	"settings_sandbox_codex_setting_up": "Esperando a Windows…",
 	"agent_switch_hint": "Al enviar, esta conversación se convierte en un cambio: el agente conserva lo dicho, obtiene su propia rama y puede editar archivos. No se publica nada hasta que lo revises."
 }

@@ -195,12 +195,14 @@ describe('settings', () => {
 				claude: {
 					available: expect.any(Boolean),
 					missing: expect.any(Array),
-					blocked: expect.any(Boolean)
+					blocked: expect.any(Boolean),
+					setup: false
 				},
 				codex: {
 					available: expect.any(Boolean),
 					missing: [],
-					blocked: expect.any(Boolean)
+					blocked: expect.any(Boolean),
+					setup: false
 				}
 			}
 		});

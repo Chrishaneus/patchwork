@@ -217,7 +217,8 @@ export function createEngine(options: EngineOptions): Engine {
 		deleteTemplate: ({ id }) => templates.remove(id),
 
 		getSettings: () => settings.get(),
-		updateSettings: (update) => settings.update(update)
+		updateSettings: (update) => settings.update(update),
+		setUpAgentSandbox: (input) => settings.setUpAgentSandbox(input)
 	};
 }
 

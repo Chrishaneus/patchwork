@@ -119,6 +119,8 @@ export type SandboxSupport = {
 	missing: string[];
 	/** bubblewrap is there but may not create namespaces (Docker's default seccomp profile). */
 	blocked: boolean;
+	/** A one-time setup with administrator approval would turn it on (Codex on Windows). */
+	setup: boolean;
 };
 
 const onPath = (name: string) =>
@@ -143,17 +145,18 @@ function bubblewrapWorks() {
  * socat are installed and bubblewrap may create namespaces; Windows not.
  */
 export function sandboxSupport(platform: NodeJS.Platform = process.platform): SandboxSupport {
-	if (platform === 'darwin') return { available: true, missing: [], blocked: false };
-	if (platform !== 'linux') return { available: false, missing: [], blocked: false };
+	const none = { available: false, missing: [], blocked: false, setup: false };
+	if (platform === 'darwin') return { ...none, available: true };
+	if (platform !== 'linux') return none;
 	const missing = [
 		['bwrap', 'bubblewrap'],
 		['socat', 'socat']
 	]
 		.filter(([command]) => !onPath(command))
 		.map(([, pkg]) => pkg);
-	if (missing.length > 0) return { available: false, missing, blocked: false };
+	if (missing.length > 0) return { ...none, missing };
 	const blocked = !bubblewrapWorks();
-	return { available: !blocked, missing, blocked };
+	return { ...none, available: !blocked, blocked };
 }
 
 /** A worktree's own git folder (`.git` there is a file pointing at it), so git can update it. */

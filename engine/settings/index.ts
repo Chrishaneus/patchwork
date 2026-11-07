@@ -1,10 +1,11 @@
 import {
 	EngineError,
+	type AgentName,
 	type GitHubAccount,
 	type Settings,
 	type SettingsUpdate
 } from '#lib/engine/contract.js';
-import { codexSandboxSupport } from '../agent/codex/index.js';
+import { codexSandboxSupport, setUpCodexSandbox } from '../agent/codex/index.js';
 import { sandboxSupport, type SandboxSupport } from '../agent/sandbox.js';
 import type { JsonStore } from '../core/store.js';
 import { cleanAttributes, defaultReviewAttributes } from '../runs/workflows.js';
@@ -91,5 +92,15 @@ export function createSettingsService(opts: {
 		return get();
 	}
 
-	return { get, update };
+	async function setUpAgentSandbox({ agent }: { agent: AgentName }): Promise<Settings> {
+		const status = (await get()).agentSandbox[agent];
+		if (agent !== 'codex' || !status.setup || !opts.codexExecutable) {
+			throw new EngineError('invalid_input', 'This sandbox has nothing to set up.');
+		}
+		await setUpCodexSandbox(opts.codexExecutable);
+		sandbox = undefined;
+		return get();
+	}
+
+	return { get, update, setUpAgentSandbox };
 }

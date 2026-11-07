@@ -1,4 +1,4 @@
-import { chmodSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { tempDirs } from '../../test-helpers';
@@ -23,16 +23,28 @@ describe('codexSandboxSupport', () => {
 		return file;
 	}
 
-	it('runs a command in Codex’s sandbox to see whether the system allows it', () => {
-		expect(codexSandboxSupport(fakeCodex(0), 'linux')).toEqual({
+	it('runs a command in Codex’s sandbox, under rules like a task’s', () => {
+		const codex = fakeCodex(0);
+		expect(codexSandboxSupport(codex, 'linux')).toEqual({
 			available: true,
 			missing: [],
-			blocked: false
+			blocked: false,
+			setup: false
 		});
+		const args = readFileSync(path.join(path.dirname(codex), 'args'), 'utf8').trim();
+		expect(args).toMatch(/^sandbox -c default_permissions="patchwork" .*"="deny".* -- true$/s);
 		expect(codexSandboxSupport(fakeCodex(1), 'linux')).toEqual({
 			available: false,
 			missing: [],
-			blocked: true
+			blocked: true,
+			setup: false
+		});
+	});
+
+	it('offers the elevated setup when the sandbox fails on Windows', () => {
+		expect(codexSandboxSupport(fakeCodex(1), 'win32')).toMatchObject({
+			available: false,
+			setup: true
 		});
 	});
 
@@ -41,7 +53,8 @@ describe('codexSandboxSupport', () => {
 		expect(codexSandboxSupport(undefined, 'linux')).toEqual({
 			available: false,
 			missing: [],
-			blocked: false
+			blocked: false,
+			setup: false
 		});
 	});
 });
@@ -64,13 +77,15 @@ describe('findCodexBinary', () => {
 });
 
 describe('codexSandbox', () => {
+	const policy = {
+		writable: ['/wt', '/repo/.git/worktrees/task'],
+		allowedDomains: ['registry.npmjs.org'],
+		deniedFiles: ['/home/me/.ssh', 'C:\\Users\\me\\.ssh'],
+		deniedEnv: ['GITHUB_TOKEN', 'CODEX_API_KEY']
+	};
+
 	it('turns the policy into a Codex permissions profile and environment filter', () => {
-		const overrides = codexSandbox({
-			writable: ['/wt', '/repo/.git/worktrees/task'],
-			allowedDomains: ['registry.npmjs.org'],
-			deniedFiles: ['/home/me/.ssh', 'C:\\Users\\me\\.ssh'],
-			deniedEnv: ['GITHUB_TOKEN', 'CODEX_API_KEY']
-		});
+		const overrides = codexSandbox(policy, 'linux');
 		expect(overrides).toEqual([
 			'default_permissions="patchwork"',
 			'permissions.patchwork.filesystem={":root"="read","/wt"="write","/repo/.git/worktrees/task"="write","/home/me/.ssh"="deny","C:\\\\Users\\\\me\\\\.ssh"="deny"}',
@@ -81,13 +96,19 @@ describe('codexSandbox', () => {
 		]);
 	});
 
+	it('uses a Windows sandbox that can deny files', () => {
+		const overrides = codexSandbox(policy, 'win32');
+		expect(overrides).toContain(
+			'permissions.patchwork.network={enabled=true,allow_local_binding=true,domains={"registry.npmjs.org"="allow"}}'
+		);
+		expect(overrides.slice(-2)).toEqual(['features.prefer_mxc=true', 'windows.sandbox="elevated"']);
+	});
+
 	it('writes nowhere when the policy has no writable folders', () => {
-		const [, filesystem] = codexSandbox({
-			writable: [],
-			allowedDomains: [],
-			deniedFiles: [],
-			deniedEnv: []
-		});
+		const [, filesystem] = codexSandbox(
+			{ writable: [], allowedDomains: [], deniedFiles: [], deniedEnv: [] },
+			'linux'
+		);
 		expect(filesystem).toBe('permissions.patchwork.filesystem={":root"="read"}');
 	});
 });

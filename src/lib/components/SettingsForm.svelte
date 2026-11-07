@@ -74,8 +74,22 @@
 	/** The agent the chosen model runs in, as picked (before saving). */
 	const agent = $derived(providerOf(model) === 'openai' ? 'codex' : 'claude');
 	const sandbox = $derived(
-		settings?.agentSandbox[agent] ?? { available: false, missing: [], blocked: false }
+		settings?.agentSandbox[agent] ?? { available: false, missing: [], blocked: false, setup: false }
 	);
+
+	let settingUp = $state(false);
+	async function setUpSandbox() {
+		error = null;
+		settingUp = true;
+		try {
+			// Not `apply`: that would undo a model picked but not saved yet.
+			settings = await client.setUpAgentSandbox({ agent });
+		} catch (e) {
+			error = e instanceof EngineError ? e.code : 'internal';
+		} finally {
+			settingUp = false;
+		}
+	}
 
 	const keyStatus = $derived(
 		settings?.anthropicApiKey.source === 'saved'
@@ -140,15 +154,26 @@
 						{sandbox.available
 							? m.settings_sandbox_on({ agent: agentNames[agent] })
 							: agent === 'codex'
-								? sandbox.blocked
-									? m.settings_sandbox_codex_blocked()
-									: m.settings_sandbox_codex_unsupported()
+								? sandbox.setup
+									? m.settings_sandbox_codex_setup()
+									: sandbox.blocked
+										? m.settings_sandbox_codex_blocked()
+										: m.settings_sandbox_codex_unsupported()
 								: sandbox.missing.length > 0
 									? m.settings_sandbox_missing({ tools: sandbox.missing.join(' + ') })
 									: sandbox.blocked
 										? m.settings_sandbox_blocked()
 										: m.settings_sandbox_unsupported()}
 					</p>
+					{#if !sandbox.available && sandbox.setup}
+						<div>
+							<Button variant="outline" disabled={settingUp} onclick={setUpSandbox}
+								>{settingUp
+									? m.settings_sandbox_codex_setting_up()
+									: m.settings_sandbox_codex_setup_button()}</Button
+							>
+						</div>
+					{/if}
 
 					<Separator />
 

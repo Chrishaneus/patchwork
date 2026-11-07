@@ -1,4 +1,6 @@
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk';
 import { EngineError, type LogEntry } from '#lib/engine/contract.js';
@@ -37,20 +39,55 @@ export function findCodexBinary(resolve: (id: string) => string): string | undef
 }
 
 /**
- * Whether Codex can sandbox commands here, by running one in its sandbox. It brings its own
- * (Seatbelt on macOS, a bundled bubblewrap on Linux, its own on Windows), but the system can
- * forbid it, like Docker's default seccomp profile or Ubuntu's AppArmor rules.
+ * Whether Codex can sandbox commands here, by running one under the same kind of rules a task
+ * gets. It brings its own sandbox (Seatbelt on macOS, a bundled bubblewrap on Linux, its own on
+ * Windows), but the system can forbid it, like Docker's default seccomp profile or Ubuntu's
+ * AppArmor rules. On Windows, files can only be denied by MXC (Windows 11 24H2 and later) or
+ * the elevated sandbox, which needs a one-time setup with administrator approval.
  */
 export function codexSandboxSupport(
 	executable: string | undefined,
 	platform: NodeJS.Platform = process.platform
 ): SandboxSupport {
-	if (platform === 'darwin') return { available: true, missing: [], blocked: false };
-	if (!executable) return { available: false, missing: [], blocked: false };
-	const probe = platform === 'win32' ? ['cmd', '/c', 'exit 0'] : ['true'];
-	const result = spawnSync(executable, ['sandbox', '--', ...probe], { timeout: 15_000 });
-	const available = result.status === 0;
-	return { available, missing: [], blocked: !available };
+	const supported = { available: true, missing: [], blocked: false, setup: false };
+	if (platform === 'darwin') return supported;
+	if (!executable) return { ...supported, available: false };
+	const dir = mkdtempSync(path.join(os.tmpdir(), 'patchwork-sandbox-'));
+	try {
+		const policy: SandboxPolicy = {
+			writable: [dir],
+			allowedDomains: ['registry.npmjs.org'],
+			deniedFiles: [path.join(dir, 'denied')],
+			deniedEnv: []
+		};
+		const config = codexSandbox(policy, platform).flatMap((override) => ['-c', override]);
+		const probe = platform === 'win32' ? ['cmd', '/d', '/c', 'exit 0'] : ['true'];
+		// A sandbox that isn't set up can hang instead of failing.
+		const result = spawnSync(executable, ['sandbox', ...config, '--', ...probe], {
+			cwd: dir,
+			timeout: 30_000
+		});
+		if (result.status === 0) return supported;
+		return { available: false, missing: [], blocked: true, setup: platform === 'win32' };
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+/**
+ * Codex's elevated Windows sandbox, set up once for this user. Windows asks for administrator
+ * approval; resolves when the setup is done (or was turned down).
+ */
+export async function setUpCodexSandbox(executable: string) {
+	await new Promise<void>((resolve, reject) =>
+		execFile(
+			executable,
+			['sandbox', 'setup', '--elevated', '--current-user'],
+			{ timeout: 10 * 60_000 },
+			(error, _stdout, stderr) =>
+				error ? reject(new EngineError('agent_failed', stderr.trim() || error.message)) : resolve()
+		)
+	);
 }
 
 /** A TOML inline table; keys are quoted because paths and hosts contain dots and colons. */
@@ -65,20 +102,28 @@ const tomlTable = (entries: Record<string, string>) =>
  * Codex's network proxy; the denied variables are filtered out of every command's environment.
  * Returned as `--config` overrides.
  */
-export function codexSandbox(policy: SandboxPolicy): string[] {
+export function codexSandbox(
+	policy: SandboxPolicy,
+	platform: NodeJS.Platform = process.platform
+): string[] {
 	const filesystem: Record<string, string> = { ':root': 'read' };
 	for (const dir of policy.writable) filesystem[dir] = 'write';
 	for (const file of policy.deniedFiles) filesystem[file] = 'deny';
 	const domains = Object.fromEntries(policy.allowedDomains.map((host) => [host, 'allow']));
 	const filters = Object.fromEntries(policy.deniedEnv.map((name) => [name, 'exclude']));
+	const windows = platform === 'win32';
+	// MXC's proxy listens on a local port, so it needs local binding.
+	const network = `enabled=true,${windows ? 'allow_local_binding=true,' : ''}domains=${tomlTable(domains)}`;
 	return [
 		`default_permissions=${JSON.stringify(PROFILE)}`,
 		`permissions.${PROFILE}.filesystem=${tomlTable(filesystem)}`,
-		`permissions.${PROFILE}.network={enabled=true,domains=${tomlTable(domains)}}`,
+		`permissions.${PROFILE}.network={${network}}`,
 		// Without the proxy, the domain rules aren't enforced.
 		'features.network_proxy=true',
 		'shell_environment_policy.ignore_default_excludes=false',
-		`shell_environment_policy.filters=${tomlTable(filters)}`
+		`shell_environment_policy.filters=${tomlTable(filters)}`,
+		// The unelevated Windows sandbox can't deny files: use MXC, or else the elevated one.
+		...(windows ? ['features.prefer_mxc=true', 'windows.sandbox="elevated"'] : [])
 	];
 }
 

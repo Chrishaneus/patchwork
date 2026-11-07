@@ -25,8 +25,18 @@ function binDir(names: string[], status = 0) {
 
 describe('sandboxSupport', () => {
 	it('is there on macOS, and not on Windows', () => {
-		expect(sandboxSupport('darwin')).toEqual({ available: true, missing: [], blocked: false });
-		expect(sandboxSupport('win32')).toEqual({ available: false, missing: [], blocked: false });
+		expect(sandboxSupport('darwin')).toEqual({
+			available: true,
+			missing: [],
+			blocked: false,
+			setup: false
+		});
+		expect(sandboxSupport('win32')).toEqual({
+			available: false,
+			missing: [],
+			blocked: false,
+			setup: false
+		});
 		expect(noSandboxNote(sandboxSupport('win32'))).toMatch(/isn’t available on this system/);
 	});
 
@@ -35,18 +45,29 @@ describe('sandboxSupport', () => {
 		expect(sandboxSupport('linux')).toEqual({
 			available: false,
 			missing: ['socat'],
-			blocked: false
+			blocked: false,
+			setup: false
 		});
 		expect(noSandboxNote(sandboxSupport('linux'))).toBe(
 			'Shell commands run without a sandbox: install socat to turn it on.'
 		);
 		process.env.PATH = binDir(['bwrap', 'socat']);
-		expect(sandboxSupport('linux')).toEqual({ available: true, missing: [], blocked: false });
+		expect(sandboxSupport('linux')).toEqual({
+			available: true,
+			missing: [],
+			blocked: false,
+			setup: false
+		});
 	});
 
 	it('notices when bubblewrap may not create namespaces', () => {
 		process.env.PATH = [binDir(['bwrap'], 1), binDir(['socat'])].join(path.delimiter);
-		expect(sandboxSupport('linux')).toEqual({ available: false, missing: [], blocked: true });
+		expect(sandboxSupport('linux')).toEqual({
+			available: false,
+			missing: [],
+			blocked: true,
+			setup: false
+		});
 		expect(noSandboxNote(sandboxSupport('linux'))).toMatch(/compose\.yaml/);
 	});
 });

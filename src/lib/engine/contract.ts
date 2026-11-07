@@ -355,12 +355,14 @@ export type AgentName = 'claude' | 'codex';
 /**
  * When a sandbox isn't available, `missing` names the tools to install (Linux), `blocked` means
  * the system forbids it (e.g. Docker's default seccomp profile), and neither means the system
- * can't (Claude Code on Windows).
+ * can't (Claude Code on Windows). `setup` means a one-time setup with administrator approval
+ * would turn it on (Codex on Windows before 11 24H2), with `setUpAgentSandbox`.
  */
 export interface SandboxStatus {
 	available: boolean;
 	missing: string[];
 	blocked: boolean;
+	setup: boolean;
 }
 
 export interface SettingsUpdate {
@@ -567,6 +569,11 @@ export interface EngineApi {
 
 	getSettings(input: Record<string, never>): Promise<Settings>;
 	updateSettings(input: SettingsUpdate): Promise<Settings>;
+	/**
+	 * Set up an agent's sandbox when its status says `setup` (Codex on Windows): the system asks
+	 * for administrator approval. Returns once done, with the sandbox checked again.
+	 */
+	setUpAgentSandbox(input: { agent: AgentName }): Promise<Settings>;
 }
 
 export type EngineMethod = keyof EngineApi;
@@ -611,7 +618,8 @@ export const engineMethods: readonly EngineMethod[] = [
 	'startAsk',
 	'classifyMessage',
 	'getSettings',
-	'updateSettings'
+	'updateSettings',
+	'setUpAgentSandbox'
 ];
 
 /** Error with a stable code that survives the trip across IPC/HTTP as `EngineErrorData`. */

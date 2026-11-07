@@ -460,5 +460,8 @@
 	"settings_sandbox_unsupported": "The agent's shell commands aren't sandboxed: this system doesn't support it. Only the command rules stand in the way of pushes and API calls.",
 	"settings_sandbox_codex_blocked": "Codex can't start its sandbox on this system: it isn't allowed to create the namespaces it needs (in Docker, use the security_opt in compose.yaml; on Ubuntu, AppArmor may forbid it). Its commands will fail until then.",
 	"settings_sandbox_codex_unsupported": "Codex isn't installed with the app for this system, so OpenAI models can't run here.",
+	"settings_sandbox_codex_setup": "Codex's sandbox needs a one-time setup on this version of Windows (Windows 11 24H2 and later don't). Windows will ask for administrator approval. Its commands will fail until then.",
+	"settings_sandbox_codex_setup_button": "Set up the sandbox",
+	"settings_sandbox_codex_setting_up": "Waiting for Windows…",
 	"agent_switch_hint": "Sending turns this conversation into a change: the agent keeps what was said, gets its own branch and can edit files. Nothing is published until you review it."
 }

@@ -161,7 +161,10 @@ pushing and opening pull requests stays with the app, after your review.
 
 - macOS has it built in. On Linux, install `bubblewrap` and `socat`. The Docker image has both,
   and `compose.yaml` relaxes Docker's seccomp filter so bubblewrap can run.
-- Codex brings its own sandbox on every system, Windows included.
+- Codex brings its own sandbox on every system, so Linux needs nothing installed (Docker still
+  needs the relaxed seccomp filter). On Windows 11 24H2 and later it works as is. Older Windows
+  versions need a one-time setup: **Settings → AI agent** offers a button for it, and Windows
+  asks for administrator approval.
 - Claude Code has no sandbox on Windows. Without one, a warning shows in the task log and under **Settings → AI
   agent**, and only the command rules (no `git push`, no `gh pr`, …) stand in the way. Those
   rules are easy to get around, so they're a safety net, not a boundary.
