@@ -4,6 +4,7 @@ import {
 	type Settings,
 	type SettingsUpdate
 } from '#lib/engine/contract.js';
+import { codexSandboxSupport } from '../agent/codex/index.js';
 import { sandboxSupport, type SandboxSupport } from '../agent/sandbox.js';
 import type { JsonStore } from '../core/store.js';
 import { cleanAttributes, defaultReviewAttributes } from '../runs/workflows.js';
@@ -17,9 +18,11 @@ export function createSettingsService(opts: {
 	envGitHubClientId?: string;
 	githubAccount: () => Promise<GitHubAccount | null>;
 	onConcurrencyChange: (value: number) => void;
+	/** Codex's binary, to check whether its sandbox can run here. */
+	codexExecutable?: string;
 }) {
 	const { store, credentials } = opts;
-	let sandbox: SandboxSupport | undefined;
+	let sandbox: { claude: SandboxSupport; codex: SandboxSupport } | undefined;
 
 	async function get(): Promise<Settings> {
 		const { settings } = await store.read();
@@ -40,7 +43,10 @@ export function createSettingsService(opts: {
 					: { value: null, source: null },
 			githubAccount: await opts.githubAccount(),
 			reviewAttributes: settings.reviewAttributes ?? defaultReviewAttributes,
-			agentSandbox: (sandbox ??= sandboxSupport())
+			agentSandbox: (sandbox ??= {
+				claude: sandboxSupport(),
+				codex: codexSandboxSupport(opts.codexExecutable)
+			})
 		};
 	}
 

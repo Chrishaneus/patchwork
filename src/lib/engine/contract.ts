@@ -346,12 +346,21 @@ export interface Settings {
 	githubAccount: GitHubAccount | null;
 	/** The default attributes reviews rate (editable). */
 	reviewAttributes: ReviewAttribute[];
-	/**
-	 * Whether the agent's shell commands run in a sandbox here. When not, `missing` names the
-	 * tools to install (Linux), `blocked` means the system forbids it (e.g. Docker's default
-	 * seccomp profile), and neither means the system can't (Windows).
-	 */
-	agentSandbox: { available: boolean; missing: string[]; blocked: boolean };
+	/** Whether each agent's shell commands run in a sandbox here (Claude Code, Codex). */
+	agentSandbox: Record<AgentName, SandboxStatus>;
+}
+
+export type AgentName = 'claude' | 'codex';
+
+/**
+ * When a sandbox isn't available, `missing` names the tools to install (Linux), `blocked` means
+ * the system forbids it (e.g. Docker's default seccomp profile), and neither means the system
+ * can't (Claude Code on Windows).
+ */
+export interface SandboxStatus {
+	available: boolean;
+	missing: string[];
+	blocked: boolean;
 }
 
 export interface SettingsUpdate {

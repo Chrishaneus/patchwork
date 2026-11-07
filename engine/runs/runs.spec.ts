@@ -192,9 +192,16 @@ describe('settings', () => {
 			githubAccount: null,
 			reviewAttributes: expect.any(Array),
 			agentSandbox: {
-				available: expect.any(Boolean),
-				missing: expect.any(Array),
-				blocked: expect.any(Boolean)
+				claude: {
+					available: expect.any(Boolean),
+					missing: expect.any(Array),
+					blocked: expect.any(Boolean)
+				},
+				codex: {
+					available: expect.any(Boolean),
+					missing: [],
+					blocked: expect.any(Boolean)
+				}
 			}
 		});
 		expect(JSON.stringify(after)).not.toContain('sk-test');

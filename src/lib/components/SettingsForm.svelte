@@ -19,6 +19,7 @@
 		type Settings
 	} from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
+	import { providerOf } from '#lib/models.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let { client, events }: { client: EngineClient; events: EngineEventSource } = $props();
@@ -68,6 +69,13 @@
 			return false;
 		}
 	}
+
+	const agentNames = { claude: 'Claude Code', codex: 'Codex' } as const;
+	/** The agent the chosen model runs in, as picked (before saving). */
+	const agent = $derived(providerOf(model) === 'openai' ? 'codex' : 'claude');
+	const sandbox = $derived(
+		settings?.agentSandbox[agent] ?? { available: false, missing: [], blocked: false }
+	);
 
 	const keyStatus = $derived(
 		settings?.anthropicApiKey.source === 'saved'
@@ -123,20 +131,23 @@
 					<p
 						class={[
 							'text-sm sm:max-w-xl',
-							settings.agentSandbox.available ? 'text-muted-foreground' : 'text-destructive'
+							sandbox.available ? 'text-muted-foreground' : 'text-destructive'
 						]}
 						data-testid="sandbox-status"
-						data-available={settings.agentSandbox.available}
+						data-agent={agent}
+						data-available={sandbox.available}
 					>
-						{settings.agentSandbox.available
-							? m.settings_sandbox_on()
-							: settings.agentSandbox.missing.length > 0
-								? m.settings_sandbox_missing({
-										tools: settings.agentSandbox.missing.join(' + ')
-									})
-								: settings.agentSandbox.blocked
-									? m.settings_sandbox_blocked()
-									: m.settings_sandbox_unsupported()}
+						{sandbox.available
+							? m.settings_sandbox_on({ agent: agentNames[agent] })
+							: agent === 'codex'
+								? sandbox.blocked
+									? m.settings_sandbox_codex_blocked()
+									: m.settings_sandbox_codex_unsupported()
+								: sandbox.missing.length > 0
+									? m.settings_sandbox_missing({ tools: sandbox.missing.join(' + ') })
+									: sandbox.blocked
+										? m.settings_sandbox_blocked()
+										: m.settings_sandbox_unsupported()}
 					</p>
 
 					<Separator />

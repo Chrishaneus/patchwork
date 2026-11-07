@@ -1,11 +1,57 @@
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk';
 import { EngineError, type LogEntry } from '#lib/engine/contract.js';
 import { withoutSecrets } from '../../core/env.js';
 import { guidance, SANDBOX_GUIDANCE, short, type AgentRunner } from '../runner.js';
-import { sandboxPolicy, type SandboxPolicy } from '../sandbox.js';
+import { sandboxPolicy, type SandboxPolicy, type SandboxSupport } from '../sandbox.js';
 
 const PROFILE = 'patchwork';
+
+const CODEX_TARGETS: Record<string, string> = {
+	'linux-x64': 'x86_64-unknown-linux-musl',
+	'linux-arm64': 'aarch64-unknown-linux-musl',
+	'darwin-x64': 'x86_64-apple-darwin',
+	'darwin-arm64': 'aarch64-apple-darwin',
+	'win32-x64': 'x86_64-pc-windows-msvc',
+	'win32-arm64': 'aarch64-pc-windows-msvc'
+};
+
+/**
+ * Codex's native binary, from its per-platform package, found with the host's module resolver
+ * (Electron's `require.resolve`, or the server's). In a packaged app it must run from
+ * app.asar.unpacked, because executables can't be started from inside the asar archive.
+ */
+export function findCodexBinary(resolve: (id: string) => string): string | undefined {
+	const key = `${process.platform}-${process.arch}`;
+	const triple = CODEX_TARGETS[key];
+	if (!triple) return undefined;
+	try {
+		const dir = path.dirname(resolve(`@openai/codex-${key}/package.json`));
+		const name = process.platform === 'win32' ? 'codex.exe' : 'codex';
+		const binary = path.join(dir, 'vendor', triple, 'bin', name);
+		return binary.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Whether Codex can sandbox commands here, by running one in its sandbox. It brings its own
+ * (Seatbelt on macOS, a bundled bubblewrap on Linux, its own on Windows), but the system can
+ * forbid it, like Docker's default seccomp profile or Ubuntu's AppArmor rules.
+ */
+export function codexSandboxSupport(
+	executable: string | undefined,
+	platform: NodeJS.Platform = process.platform
+): SandboxSupport {
+	if (platform === 'darwin') return { available: true, missing: [], blocked: false };
+	if (!executable) return { available: false, missing: [], blocked: false };
+	const probe = platform === 'win32' ? ['cmd', '/c', 'exit 0'] : ['true'];
+	const result = spawnSync(executable, ['sandbox', '--', ...probe], { timeout: 15_000 });
+	const available = result.status === 0;
+	return { available, missing: [], blocked: !available };
+}
 
 /** A TOML inline table; keys are quoted because paths and hosts contain dots and colons. */
 const tomlTable = (entries: Record<string, string>) =>

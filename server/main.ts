@@ -5,6 +5,7 @@
 // like the desktop app: local folders in your home folder (or PATCHWORK_REPOS) can be used, it
 // listens on localhost only, and the agent can use your Claude login.
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { applyLegacyEnv, migrateDataDir } from '../engine/core/env.js';
@@ -12,7 +13,8 @@ import {
 	classifyByRules,
 	createEngine,
 	createTestAgent,
-	FileSecretStore
+	FileSecretStore,
+	findCodexBinary
 } from '../engine/index.js';
 import { createRequestHandler } from './app.js';
 
@@ -50,6 +52,7 @@ const engine = createEngine({
 	githubApiUrl: env.PATCHWORK_GITHUB_API_URL || undefined,
 	gitlabApiUrl: env.PATCHWORK_GITLAB_API_URL || undefined,
 	secrets: new FileSecretStore(path.join(dataDir, 'secrets.json')),
+	codexExecutable: findCodexBinary(createRequire(import.meta.url).resolve),
 	// End-to-end tests use a scripted agent instead of the real model.
 	runAgent: env.PATCHWORK_TEST_AGENT ? createTestAgent(env.PATCHWORK_TEST_AGENT) : undefined,
 	classifyMode: env.PATCHWORK_TEST_AGENT ? classifyByRules : undefined

@@ -32,6 +32,7 @@ export type { AgentRunner } from './agent/runner.js';
 export { classifyByRules, type ModeClassifier } from './agent/classifier.js';
 export { FileSecretStore, type SecretStore } from './core/secrets.js';
 export { createTestAgent } from './agent/test-agent.js';
+export { findCodexBinary } from './agent/codex/index.js';
 
 export interface EngineOptions {
 	/** Folder for the engine's own data: the store, task logs and worktrees. */
@@ -133,7 +134,8 @@ export function createEngine(options: EngineOptions): Engine {
 		credentials,
 		envGitHubClientId: options.githubClientId,
 		githubAccount: () => githubAuth.account(),
-		onConcurrencyChange: (value) => runs.setConcurrency(value)
+		onConcurrencyChange: (value) => runs.setConcurrency(value),
+		codexExecutable: options.codexExecutable
 	});
 	const templates = createTemplateService(store);
 	const classifyMessage = createMessageClassifier({
