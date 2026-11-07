@@ -25,9 +25,11 @@ import { performChecks } from './checks.js';
 import { executeCodeTask } from './code-task.js';
 import { createRunContext, newTask, type RunServiceDeps } from './context.js';
 import { publishTask, postReview, syncPullRequests } from './publishing.js';
+import { findPullRequestToReview, listPullRequests } from './pull-requests.js';
 import { createTaskQueue, startTimeLimit, type TaskHandle } from './queue.js';
 import { dropWorkingCopy, executeReadOnlyTask } from './read-only-task.js';
 import { recoverInterrupted } from './recovery.js';
+import { cleanAttributes, reviewFocus } from './workflows.js';
 
 export type { RunServiceDeps } from './context.js';
 
@@ -261,36 +263,57 @@ export function createRunService(deps: RunServiceDeps) {
 
 		syncPullRequests: () => syncPullRequests(ctx),
 
-		/** Queue a review of one pull request. */
-		startReview(input: {
-			repo: Repository;
-			pullRequest: ReviewedPullRequest;
+		listPullRequests: (repositoryId: string) => listPullRequests(ctx, repositoryId),
+
+		/** Queue a review of one pull request, by link or by repository and number. */
+		async startReview(input: {
+			url?: string;
+			repositoryId?: string;
+			number?: number;
 			attributes: ReviewAttribute[];
 			instruction?: string;
-			focus?: string;
 		}): Promise<Run> {
+			const attributes = cleanAttributes(input.attributes);
+			const { repo, pullRequest } = await findPullRequestToReview(ctx, input);
 			return queueReadOnlyRun({
 				kind: 'review',
-				instruction: input.instruction || input.pullRequest.title,
-				focus: input.focus,
-				repos: [input.repo],
-				pullRequest: input.pullRequest,
-				attributes: input.attributes,
-				branch: () => input.pullRequest.headRef,
-				baseBranch: () => input.pullRequest.baseRef
+				instruction: input.instruction?.trim() || pullRequest.title,
+				// Whatever you wrote besides the link is for the agent.
+				focus: reviewFocus(input.instruction),
+				repos: [repo],
+				pullRequest,
+				attributes,
+				branch: () => pullRequest.headRef,
+				baseBranch: () => pullRequest.baseRef
 			});
 		},
 
-		/** Queue an exploration of an idea (or a question) in one or more repositories. */
-		startExplore(input: {
-			repos: Repository[];
-			idea: string;
-			kind?: 'explore' | 'ask';
+		/** Queue an exploration of an idea, or a question, in one or more repositories. */
+		async startReadOnly(input: {
+			kind: 'explore' | 'ask';
+			repositoryIds: string[];
+			text: string;
 		}): Promise<Run> {
+			const { kind, repositoryIds, text } = input;
+			if (typeof text !== 'string' || !text.trim()) {
+				throw new EngineError(
+					'invalid_input',
+					kind === 'ask' ? 'Ask a question.' : 'Describe what you want to build.'
+				);
+			}
+			if (!Array.isArray(repositoryIds) || repositoryIds.length === 0) {
+				throw new EngineError('invalid_input', 'Choose at least one repository.');
+			}
+			const { repositories: known } = await store.read();
+			const repos = repositoryIds.map((id) => {
+				const repo = known.find((r) => r.id === id);
+				if (!repo) throw new EngineError('repository_not_found', `Unknown repository: ${id}`);
+				return repo;
+			});
 			return queueReadOnlyRun({
-				kind: input.kind ?? 'explore',
-				instruction: input.idea,
-				repos: input.repos,
+				kind,
+				instruction: text.trim(),
+				repos,
 				branch: () => '',
 				baseBranch: (repo) => repo.defaultBranch
 			});

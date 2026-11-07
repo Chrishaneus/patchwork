@@ -134,6 +134,7 @@ ai-tool/
 │   ├── repositories/  ← validate, add, clone, check, remove repositories; folder browsing
 │   ├── runs/          ← queue, task lifecycle, cancel/timeout, checks, publish, discard;
 │   │                    review/explore/ask prompts and parsing (workflows.ts)
+│   ├── settings/      ← Settings page values, saved credentials, instruction templates
 │   ├── agent/         ← Claude Agent SDK runner, tool policy, Auto-mode classifier, test agent
 │   └── providers/     ← GitHub and GitLab APIs, GitHub sign-in; index.ts picks the provider,
 │                        token and HTTPS push auth

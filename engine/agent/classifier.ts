@@ -1,4 +1,9 @@
-import { agentModes, detectAgentMode, type AgentMode } from '#lib/agent-mode.js';
+import {
+	agentModes,
+	detectAgentMode,
+	findPullRequestLink,
+	type AgentMode
+} from '#lib/agent-mode.js';
 import { EngineError } from '#lib/engine/contract.js';
 
 export interface ClassifyInput {
@@ -70,6 +75,37 @@ export function createClaudeModeClassifier(
 			throw new EngineError('agent_failed', 'The model gave no mode.');
 		} finally {
 			signal.removeEventListener('abort', abort);
+		}
+	};
+}
+
+/** Long enough to read the intent; the rest of a long message doesn't change it. */
+const MAX_CLASSIFY_CHARS = 4000;
+const CLASSIFY_TIMEOUT_MS = 15_000;
+
+/**
+ * The engine's `classifyMessage`: the model decides, except for a pull request link (always a
+ * review) or when it can't answer, where the keyword rules do.
+ */
+export function createMessageClassifier(opts: {
+	classify: ModeClassifier;
+	getApiKey: () => Promise<string | null>;
+}) {
+	return async ({ text }: { text: string }) => {
+		if (typeof text !== 'string') throw new EngineError('invalid_input', 'Write a message.');
+		const message = text.trim().slice(0, MAX_CLASSIFY_CHARS);
+		if (!message || findPullRequestLink(message)) {
+			return { mode: detectAgentMode(message), source: 'rules' as const };
+		}
+		try {
+			const mode = await opts.classify({
+				text: message,
+				apiKey: await opts.getApiKey(),
+				signal: AbortSignal.timeout(CLASSIFY_TIMEOUT_MS)
+			});
+			return { mode, source: 'ai' as const };
+		} catch {
+			return { mode: detectAgentMode(message), source: 'rules' as const };
 		}
 	};
 }

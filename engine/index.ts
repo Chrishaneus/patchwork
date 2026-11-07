@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
 	EngineError,
@@ -6,28 +5,26 @@ import {
 	type EngineApi,
 	type EngineErrorData,
 	type EngineEvent,
-	type EngineResult,
-	type Repository,
-	type Settings
+	type EngineResult
 } from '#lib/engine/contract.js';
-import { detectAgentMode, findPullRequestLink } from '#lib/agent-mode.js';
+import {
+	createClaudeModeClassifier,
+	createMessageClassifier,
+	type ModeClassifier
+} from './agent/classifier.js';
 import { createClaudeAgentRunner, type AgentRunner } from './agent/runner.js';
-import { createClaudeModeClassifier, type ModeClassifier } from './agent/classifier.js';
 import { EngineEvents } from './core/events.js';
 import { TaskLogs } from './core/logs.js';
-import { parseRemoteUrl } from './git/git.js';
-import { createGitHubAuth } from './providers/github-auth.js';
-import { providerAuthEnv, providerFor } from './providers/index.js';
-import {
-	cleanAttributes,
-	defaultReviewAttributes,
-	parsePullRequestUrl,
-	reviewFocus
-} from './runs/workflows.js';
-import { createRepositoryService } from './repositories/index.js';
-import { createRunService } from './runs/index.js';
 import { MemorySecretStore, type SecretStore } from './core/secrets.js';
 import { JsonStore } from './core/store.js';
+import { parseRemoteUrl } from './git/git.js';
+import { createGitHubAuth } from './providers/github-auth.js';
+import { providerAuthEnv } from './providers/index.js';
+import { createRepositoryService } from './repositories/index.js';
+import { createRunService } from './runs/index.js';
+import { createCredentials } from './settings/credentials.js';
+import { createSettingsService } from './settings/index.js';
+import { createTemplateService } from './settings/templates.js';
 
 export type { AgentRunner } from './agent/runner.js';
 export { classifyByRules, type ModeClassifier } from './agent/classifier.js';
@@ -66,13 +63,6 @@ export interface Engine extends EngineApi {
 	subscribe(listener: (event: EngineEvent) => void): () => void;
 }
 
-const API_KEY = 'anthropicApiKey';
-const GITHUB_TOKEN = 'githubToken';
-const GITLAB_TOKEN = 'gitlabToken';
-/** Long enough to read the intent; the rest of a long message doesn't change it. */
-const MAX_CLASSIFY_CHARS = 4000;
-const CLASSIFY_TIMEOUT_MS = 15_000;
-
 /** Create the engine. Hosts (Electron main, the HTTP server) wrap it with `handleEngineCall`. */
 export function createEngine(options: EngineOptions): Engine {
 	const store = new JsonStore(options.dataDir);
@@ -86,24 +76,8 @@ export function createEngine(options: EngineOptions): Engine {
 		secrets,
 		events
 	});
+	const credentials = createCredentials(secrets, { signedInGitHubToken: () => githubAuth.token() });
 
-	const getApiKey = async () =>
-		(await secrets.get(API_KEY)) ?? process.env.ANTHROPIC_API_KEY ?? null;
-	const classifyMode =
-		options.classifyMode ?? createClaudeModeClassifier({ executable: options.agentExecutable });
-	const envGitHubToken = () => process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
-	// GitHub sign-in first, then a saved token, then the environment.
-	const getGitHubToken = async () =>
-		(await githubAuth.token()) ?? (await secrets.get(GITHUB_TOKEN)) ?? envGitHubToken();
-	const envGitLabToken = () => process.env.GITLAB_TOKEN || null;
-	const getGitLabToken = async () => (await secrets.get(GITLAB_TOKEN)) ?? envGitLabToken();
-
-	const providerSettings = {
-		githubApiUrl: options.githubApiUrl ?? 'https://api.github.com',
-		gitlabApiUrl: options.gitlabApiUrl,
-		getGitHubToken,
-		getGitLabToken
-	};
 	const repositories = createRepositoryService(store, {
 		roots: options.repositoryRoots,
 		localPaths: options.localPaths ?? true,
@@ -111,9 +85,9 @@ export function createEngine(options: EngineOptions): Engine {
 		authEnvFor: async (remoteUrl) => {
 			const { provider } = parseRemoteUrl(remoteUrl);
 			if (provider === 'github')
-				return providerAuthEnv(remoteUrl, 'github', await getGitHubToken());
+				return providerAuthEnv(remoteUrl, 'github', await credentials.getGitHubToken());
 			if (provider === 'gitlab')
-				return providerAuthEnv(remoteUrl, 'gitlab', await getGitLabToken());
+				return providerAuthEnv(remoteUrl, 'gitlab', await credentials.getGitLabToken());
 			return {};
 		},
 		onUpdate: (repository) => events.emit({ type: 'repository.updated', repository })
@@ -125,9 +99,15 @@ export function createEngine(options: EngineOptions): Engine {
 		logs: new TaskLogs(path.join(options.dataDir, 'logs')),
 		worktreesDir: path.join(options.dataDir, 'worktrees'),
 		runAgent: options.runAgent ?? createClaudeAgentRunner({ executable: options.agentExecutable }),
-		getApiKey,
-		providers: providerSettings,
+		getApiKey: credentials.getApiKey,
+		providers: {
+			githubApiUrl: options.githubApiUrl ?? 'https://api.github.com',
+			gitlabApiUrl: options.gitlabApiUrl,
+			getGitHubToken: credentials.getGitHubToken,
+			getGitLabToken: credentials.getGitLabToken
+		},
 		ensureCloned: (id) => repositories.clone(id),
+		addRepositoryFromUrl: (url) => repositories.addFromUrl(url),
 		concurrency: 2
 	});
 	// If recovery fails (e.g. an unreadable data file), the calls that wait on it report the error.
@@ -137,96 +117,19 @@ export function createEngine(options: EngineOptions): Engine {
 	})();
 	ready.catch(() => undefined);
 
-	async function getSettings(): Promise<Settings> {
-		const { settings } = await store.read();
-		const saved = await secrets.get(API_KEY);
-		return {
-			model: settings.model,
-			timeoutMinutes: settings.timeoutMinutes,
-			concurrency: settings.concurrency,
-			anthropicApiKey: {
-				source: saved ? 'saved' : process.env.ANTHROPIC_API_KEY ? 'environment' : null,
-				encrypted: secrets.encrypted
-			},
-			githubToken: {
-				source: (await secrets.get(GITHUB_TOKEN))
-					? 'saved'
-					: envGitHubToken()
-						? 'environment'
-						: null,
-				encrypted: secrets.encrypted
-			},
-			gitlabToken: {
-				source: (await secrets.get(GITLAB_TOKEN))
-					? 'saved'
-					: envGitLabToken()
-						? 'environment'
-						: null,
-				encrypted: secrets.encrypted
-			},
-			githubClientId: settings.githubClientId
-				? { value: settings.githubClientId, source: 'saved' }
-				: options.githubClientId
-					? { value: options.githubClientId, source: 'environment' }
-					: { value: null, source: null },
-			githubAccount: await githubAuth.account(),
-			reviewAttributes: settings.reviewAttributes ?? defaultReviewAttributes
-		};
-	}
-
-	/** Explore and Ask: validate, then queue a read-only run on the chosen repositories. */
-	async function startReadOnly(kind: 'explore' | 'ask', repositoryIds: string[], text: string) {
-		if (typeof text !== 'string' || !text.trim()) {
-			throw new EngineError(
-				'invalid_input',
-				kind === 'ask' ? 'Ask a question.' : 'Describe what you want to build.'
-			);
-		}
-		if (!Array.isArray(repositoryIds) || repositoryIds.length === 0) {
-			throw new EngineError('invalid_input', 'Choose at least one repository.');
-		}
-		const { repositories: known } = await store.read();
-		const repos = repositoryIds.map((id) => {
-			const repo = known.find((r) => r.id === id);
-			if (!repo) throw new EngineError('repository_not_found', `Unknown repository: ${id}`);
-			return repo;
-		});
-		return runs.startExplore({ repos, idea: text.trim(), kind });
-	}
-
-	/** The GitHub/GitLab client for a repository that supports pull requests. */
-	async function providerOf(repo: Repository) {
-		const provider = await providerFor(repo, providerSettings);
-		if (!provider || !repo.slug) {
-			throw new EngineError(
-				'invalid_input',
-				`${repo.name} isn’t on GitHub or GitLab, so it has no pull requests to review.`
-			);
-		}
-		return { provider, slug: repo.slug };
-	}
-
-	/** Find the repository a pull request link points at; add it (by URL, not cloned) if needed. */
-	async function repositoryForPullRequest(
-		url: string
-	): Promise<{ repo: Repository; number: number }> {
-		const pr = parsePullRequestUrl(url);
-		const hostname = new URL(url.trim()).hostname.toLowerCase();
-		const matches = (r: Repository) => {
-			const remote = parseRemoteUrl(r.remoteUrl);
-			return (
-				remote.host.toLowerCase() === hostname &&
-				remote.slug?.toLowerCase() === pr.slug.toLowerCase()
-			);
-		};
-		const { repositories: known } = await store.read();
-		// Prefer a local folder you added, then the app's own copy.
-		const existing = known.find((r) => matches(r) && !r.managed) ?? known.find(matches);
-		if (existing) return { repo: existing, number: pr.number };
-		const protocol = new URL(url.trim()).protocol;
-		const added = await repositories.addFromUrl(`${protocol}//${pr.host}/${pr.slug}.git`);
-		return { repo: added, number: pr.number };
-	}
+	const settings = createSettingsService({
+		store,
+		credentials,
+		envGitHubClientId: options.githubClientId,
+		githubAccount: () => githubAuth.account(),
+		onConcurrencyChange: (value) => runs.setConcurrency(value)
+	});
+	const templates = createTemplateService(store);
+	const classifyMessage = createMessageClassifier({
+		classify:
+			options.classifyMode ?? createClaudeModeClassifier({ executable: options.agentExecutable }),
+		getApiKey: credentials.getApiKey
+	});
 
 	// Keep pull request states fresh in the background (merged, closed). The timer doesn't keep
 	// the process alive.
@@ -268,7 +171,7 @@ export function createEngine(options: EngineOptions): Engine {
 		}),
 		async signOutGitHub() {
 			await githubAuth.signOut();
-			return getSettings();
+			return settings.get();
 		},
 		listGitHubRepositories: () => githubAuth.listRepositories(),
 
@@ -284,148 +187,23 @@ export function createEngine(options: EngineOptions): Engine {
 		followUpTask: afterReady(({ taskId, instruction }) => runs.followUp(taskId, instruction)),
 		syncPullRequests: afterReady(() => runs.syncPullRequests()),
 
-		async listPullRequests({ repositoryId }) {
-			const repo = (await store.read()).repositories.find((r) => r.id === repositoryId);
-			if (!repo) throw new EngineError('repository_not_found', 'The repository was removed.');
-			const { provider, slug } = await providerOf(repo);
-			return provider.listOpen(slug);
-		},
-		startReview: afterReady(async ({ url, repositoryId, number, attributes, instruction }) => {
-			const chosen = cleanAttributes(attributes);
-			let repo: Repository | undefined;
-			let prNumber: number;
-			if (url?.trim()) {
-				({ repo, number: prNumber } = await repositoryForPullRequest(url));
-			} else {
-				repo = (await store.read()).repositories.find((r) => r.id === repositoryId);
-				if (!repo) throw new EngineError('repository_not_found', 'Choose a repository.');
-				if (!Number.isInteger(number) || (number ?? 0) < 1) {
-					throw new EngineError('invalid_pull_request', 'Choose a pull request.');
-				}
-				prNumber = number!;
-			}
-			const { provider, slug } = await providerOf(repo);
-			const details = await provider.get(slug, prNumber);
-			return runs.startReview({
-				repo,
-				pullRequest: {
-					provider: provider.kind,
-					url: details.url,
-					number: prNumber,
-					title: details.title,
-					baseRef: details.baseRef,
-					headRef: details.headRef
-				},
-				attributes: chosen,
-				instruction: instruction?.trim() || undefined,
-				// Whatever you wrote besides the link is for the agent.
-				focus: reviewFocus(instruction)
-			});
-		}),
+		listPullRequests: ({ repositoryId }) => runs.listPullRequests(repositoryId),
+		startReview: afterReady((input) => runs.startReview(input)),
 		postReview: ({ taskId }) => runs.postReview(taskId),
 		startAsk: afterReady(({ repositoryIds, question }) =>
-			startReadOnly('ask', repositoryIds, question)
+			runs.startReadOnly({ kind: 'ask', repositoryIds, text: question })
 		),
 		startExplore: afterReady(({ repositoryIds, idea }) =>
-			startReadOnly('explore', repositoryIds, idea)
+			runs.startReadOnly({ kind: 'explore', repositoryIds, text: idea })
 		),
-		async classifyMessage({ text }) {
-			if (typeof text !== 'string') throw new EngineError('invalid_input', 'Write a message.');
-			const message = text.trim().slice(0, MAX_CLASSIFY_CHARS);
-			// A pull request link is always a review, and Review needs the link anyway.
-			if (!message || findPullRequestLink(message)) {
-				return { mode: detectAgentMode(message), source: 'rules' };
-			}
-			try {
-				const mode = await classifyMode({
-					text: message,
-					apiKey: await getApiKey(),
-					signal: AbortSignal.timeout(CLASSIFY_TIMEOUT_MS)
-				});
-				return { mode, source: 'ai' };
-			} catch {
-				return { mode: detectAgentMode(message), source: 'rules' };
-			}
-		},
+		classifyMessage,
 
-		async listTemplates() {
-			return [...(await store.read()).templates].sort((a, b) => a.name.localeCompare(b.name));
-		},
-		async saveTemplate({ id, name, instruction }) {
-			const cleanName = name?.trim();
-			const cleanInstruction = instruction?.trim();
-			if (!cleanName || !cleanInstruction) {
-				throw new EngineError('invalid_input', 'A template needs a name and an instruction.');
-			}
-			return store.update((data) => {
-				const existing = id ? data.templates.find((t) => t.id === id) : undefined;
-				if (id && !existing) throw new EngineError('invalid_input', `Unknown template: ${id}`);
-				if (existing) {
-					existing.name = cleanName;
-					existing.instruction = cleanInstruction;
-					return { ...existing };
-				}
-				const created = { id: randomUUID(), name: cleanName, instruction: cleanInstruction };
-				data.templates.push(created);
-				return created;
-			});
-		},
-		async deleteTemplate({ id }) {
-			await store.update((data) => {
-				data.templates = data.templates.filter((t) => t.id !== id);
-			});
-			return { id };
-		},
+		listTemplates: () => templates.list(),
+		saveTemplate: (input) => templates.save(input),
+		deleteTemplate: ({ id }) => templates.remove(id),
 
-		getSettings: () => getSettings(),
-		async updateSettings(update) {
-			if (update.model !== undefined) {
-				if (!update.model.trim()) throw new EngineError('invalid_input', 'Choose a model.');
-			}
-			if (update.timeoutMinutes !== undefined) {
-				const t = update.timeoutMinutes;
-				if (!Number.isInteger(t) || t < 1 || t > 240) {
-					throw new EngineError('invalid_input', 'The time limit must be 1–240 minutes.');
-				}
-			}
-			if (update.concurrency !== undefined) {
-				const c = update.concurrency;
-				if (!Number.isInteger(c) || c < 1 || c > 8) {
-					throw new EngineError('invalid_input', 'Tasks at the same time must be 1–8.');
-				}
-			}
-			const reviewAttributes =
-				update.reviewAttributes !== undefined
-					? cleanAttributes(update.reviewAttributes)
-					: undefined;
-			await store.update((data) => {
-				if (reviewAttributes) data.settings.reviewAttributes = reviewAttributes;
-				if (update.model !== undefined) data.settings.model = update.model.trim();
-				if (update.timeoutMinutes !== undefined)
-					data.settings.timeoutMinutes = update.timeoutMinutes;
-				if (update.concurrency !== undefined) data.settings.concurrency = update.concurrency;
-			});
-			if (update.anthropicApiKey !== undefined) {
-				await secrets.set(API_KEY, update.anthropicApiKey?.trim() || null);
-			}
-			if (update.concurrency !== undefined) runs.setConcurrency(update.concurrency);
-			if (update.githubToken !== undefined) {
-				await secrets.set(GITHUB_TOKEN, update.githubToken?.trim() || null);
-			}
-			if (update.gitlabToken !== undefined) {
-				await secrets.set(GITLAB_TOKEN, update.gitlabToken?.trim() || null);
-			}
-			if (update.githubClientId !== undefined) {
-				const id = update.githubClientId?.trim() || null;
-				if (id && !/^[A-Za-z0-9._-]{8,64}$/.test(id)) {
-					throw new EngineError('invalid_input', 'That doesn’t look like a GitHub App client ID.');
-				}
-				await store.update((data) => {
-					data.settings.githubClientId = id;
-				});
-			}
-			return getSettings();
-		}
+		getSettings: () => settings.get(),
+		updateSettings: (update) => settings.update(update)
 	};
 }
 

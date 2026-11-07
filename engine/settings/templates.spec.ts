@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createEngine } from './index';
-import { tempDirs } from './test-helpers';
+import { createEngine } from '../index';
+import { tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());

@@ -23,6 +23,8 @@ export interface RunServiceDeps {
 	providers: ProviderSettings;
 	/** Clone a repository that was added by URL, if it isn't yet (shared between callers). */
 	ensureCloned: (repositoryId: string) => Promise<Repository>;
+	/** Add a repository by URL without cloning it (a review of a repository not added yet). */
+	addRepositoryFromUrl: (url: string) => Promise<Repository>;
 	/** How many tasks may run at the same time, at first; see `setConcurrency`. */
 	concurrency: number;
 }
