@@ -214,6 +214,9 @@ test('saves settings without showing the API key again', async () => {
 	await expect(page.getByTestId('model-name')).toHaveText('Custom model');
 	await expect(page.getByLabel('Model ID')).toHaveValue('claude-experimental-x');
 
+	// Whether the agent's commands are sandboxed depends on the machine; it's said either way.
+	await expect(page.getByTestId('sandbox-status')).toContainText('sandbox');
+
 	await page.getByLabel('API key').fill('sk-ant-test-123');
 	await page.getByRole('button', { name: 'Save key' }).click();
 	await expect(page.getByTestId('key-status')).toHaveText('A key is saved.');

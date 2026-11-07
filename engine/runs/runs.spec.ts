@@ -188,7 +188,12 @@ describe('settings', () => {
 			gitlabToken: expect.objectContaining({ encrypted: true }),
 			githubClientId: { value: null, source: null },
 			githubAccount: null,
-			reviewAttributes: expect.any(Array)
+			reviewAttributes: expect.any(Array),
+			agentSandbox: {
+				available: expect.any(Boolean),
+				missing: expect.any(Array),
+				blocked: expect.any(Boolean)
+			}
 		});
 		expect(JSON.stringify(after)).not.toContain('sk-test');
 

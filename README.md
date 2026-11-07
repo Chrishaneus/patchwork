@@ -150,6 +150,17 @@ If the agent reports that it isn't signed in, it has no Anthropic credentials. T
 and local mode can use your Claude login. Docker can't, so add an API key under **Settings → AI
 agent**, or set `ANTHROPIC_API_KEY` before `docker compose up`.
 
+The agent's shell commands run in Claude Code's sandbox. They can write only in the working copy,
+connect only to package registries (npm, PyPI, crates.io, Maven and the like, not GitHub or
+GitLab), and can't read the app's tokens, its saved secrets, SSH keys or git credentials. So
+pushing and opening pull requests stays with the app, after your review.
+
+- macOS has it built in. On Linux, install `bubblewrap` and `socat`. The Docker image has both,
+  and `compose.yaml` relaxes Docker's seccomp filter so bubblewrap can run.
+- Windows has no sandbox. Without one, a warning shows in the task log and under **Settings → AI
+  agent**, and only the command rules (no `git push`, no `gh pr`, …) stand in the way. Those
+  rules are easy to get around, so they're a safety net, not a boundary.
+
 Recent conversations are listed next to the chat. The old links (`/changes/new`, `/review`,
 `/explore`) open the Agent in the matching mode.
 

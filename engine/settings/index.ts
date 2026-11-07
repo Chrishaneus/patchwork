@@ -4,6 +4,7 @@ import {
 	type Settings,
 	type SettingsUpdate
 } from '#lib/engine/contract.js';
+import { sandboxSupport, type SandboxSupport } from '../agent/sandbox.js';
 import type { JsonStore } from '../core/store.js';
 import { cleanAttributes, defaultReviewAttributes } from '../runs/workflows.js';
 import type { Credentials } from './credentials.js';
@@ -18,6 +19,7 @@ export function createSettingsService(opts: {
 	onConcurrencyChange: (value: number) => void;
 }) {
 	const { store, credentials } = opts;
+	let sandbox: SandboxSupport | undefined;
 
 	async function get(): Promise<Settings> {
 		const { settings } = await store.read();
@@ -36,7 +38,8 @@ export function createSettingsService(opts: {
 					? { value: opts.envGitHubClientId, source: 'environment' }
 					: { value: null, source: null },
 			githubAccount: await opts.githubAccount(),
-			reviewAttributes: settings.reviewAttributes ?? defaultReviewAttributes
+			reviewAttributes: settings.reviewAttributes ?? defaultReviewAttributes,
+			agentSandbox: (sandbox ??= sandboxSupport())
 		};
 	}
 

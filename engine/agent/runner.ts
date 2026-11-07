@@ -9,6 +9,22 @@ import {
 } from '#lib/engine/contract.js';
 import { withoutSecrets } from '../core/env.js';
 import { decideToolUse } from './policy.js';
+import { sandboxSettings, sandboxSupport, type SandboxSupport } from './sandbox.js';
+
+const SANDBOX_GUIDANCE = [
+	'Shell commands run in a sandbox: they can write only inside this working copy and reach only',
+	'package registries (npm, PyPI, crates.io and the like), not GitHub or GitLab. If a command',
+	'fails because of that, say so in your summary rather than working around it.'
+].join('\n');
+
+/** The task log's note when commands can't be sandboxed here. */
+export function noSandboxNote(support: SandboxSupport) {
+	return support.missing.length > 0
+		? `Shell commands run without a sandbox: install ${support.missing.join(' and ')} to turn it on.`
+		: support.blocked
+			? 'Shell commands run without a sandbox: this system doesn’t let bubblewrap create namespaces (in Docker, see compose.yaml).'
+			: 'Shell commands run without a sandbox: it isn’t available on this system.';
+}
 
 /**
  * The environment for Claude Code: none of the app's tokens (the agent's shell commands inherit
@@ -137,9 +153,18 @@ export function describeMessage(message: SDKMessage, cwd: string): Omit<LogEntry
 }
 
 /** The real agent: the Claude Agent SDK (Claude Code as a library) running in the worktree. */
-export function createClaudeAgentRunner(opts: { executable?: string } = {}): AgentRunner {
+export function createClaudeAgentRunner(
+	opts: {
+		executable?: string;
+		/** Files the agent's commands must never read, such as the app's saved tokens. */
+		protectedFiles?: string[];
+	} = {}
+): AgentRunner {
+	let support: SandboxSupport | undefined;
 	return async (input) => {
 		const { query } = await import('@anthropic-ai/claude-agent-sdk');
+		support ??= sandboxSupport();
+		if (!support.available) input.log({ kind: 'info', text: noSandboxNote(support) });
 		const abortController = new AbortController();
 		const abort = () => abortController.abort();
 		if (input.signal.aborted) abort();
@@ -169,7 +194,19 @@ export function createClaudeAgentRunner(opts: { executable?: string } = {}): Age
 					// Every tool call that needs permission goes through our policy.
 					permissionMode: 'default',
 					canUseTool,
-					systemPrompt: { type: 'preset', preset: 'claude_code', append: guidance(input) },
+					systemPrompt: {
+						type: 'preset',
+						preset: 'claude_code',
+						append: [guidance(input), ...(support.available ? [SANDBOX_GUIDANCE] : [])].join('\n')
+					},
+					...(support.available
+						? {
+								sandbox: sandboxSettings({
+									cwd: input.cwd,
+									protectedFiles: opts.protectedFiles ?? []
+								})
+							}
+						: {}),
 					// Load the repository's own CLAUDE.md and project settings, not this machine's.
 					settingSources: ['project'],
 					// No "Generated with Claude Code" footers in commits or PR descriptions.

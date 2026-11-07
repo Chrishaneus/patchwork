@@ -120,6 +120,25 @@
 						</div>
 					</form>
 
+					<p
+						class={[
+							'text-sm sm:max-w-xl',
+							settings.agentSandbox.available ? 'text-muted-foreground' : 'text-destructive'
+						]}
+						data-testid="sandbox-status"
+						data-available={settings.agentSandbox.available}
+					>
+						{settings.agentSandbox.available
+							? m.settings_sandbox_on()
+							: settings.agentSandbox.missing.length > 0
+								? m.settings_sandbox_missing({
+										tools: settings.agentSandbox.missing.join(' + ')
+									})
+								: settings.agentSandbox.blocked
+									? m.settings_sandbox_blocked()
+									: m.settings_sandbox_unsupported()}
+					</p>
+
 					<Separator />
 
 					<form

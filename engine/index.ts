@@ -98,7 +98,13 @@ export function createEngine(options: EngineOptions): Engine {
 		events,
 		logs: new TaskLogs(path.join(options.dataDir, 'logs')),
 		worktreesDir: path.join(options.dataDir, 'worktrees'),
-		runAgent: options.runAgent ?? createClaudeAgentRunner({ executable: options.agentExecutable }),
+		runAgent:
+			options.runAgent ??
+			createClaudeAgentRunner({
+				executable: options.agentExecutable,
+				// Hosts keep saved tokens here (FileSecretStore).
+				protectedFiles: [path.join(options.dataDir, 'secrets.json')]
+			}),
 		getApiKey: credentials.getApiKey,
 		providers: {
 			githubApiUrl: options.githubApiUrl ?? 'https://api.github.com',

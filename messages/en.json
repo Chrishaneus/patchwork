@@ -452,5 +452,9 @@
 	"error_agent_not_signed_in": "The agent isn't signed in to Anthropic. Add an API key under Settings → AI agent.",
 	"agent_reply_auto_hint": "Let the AI tell whether your reply asks for a change",
 	"agent_placeholder_switch": "Describe the change to make…",
+	"settings_sandbox_on": "The agent's shell commands run in a sandbox: they can only write in the working copy, only reach package registries, and can't read tokens or credential files.",
+	"settings_sandbox_missing": "The agent's shell commands aren't sandboxed. Install {tools} on this machine to turn the sandbox on; until then only the command rules stand in the way of pushes and API calls.",
+	"settings_sandbox_blocked": "The agent's shell commands aren't sandboxed: this system doesn't let bubblewrap create namespaces. In Docker, use the security_opt in compose.yaml. Until then only the command rules stand in the way of pushes and API calls.",
+	"settings_sandbox_unsupported": "The agent's shell commands aren't sandboxed: this system doesn't support it. Only the command rules stand in the way of pushes and API calls.",
 	"agent_switch_hint": "Sending turns this conversation into a change: the agent keeps what was said, gets its own branch and can edit files. Nothing is published until you review it."
 }

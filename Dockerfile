@@ -18,7 +18,8 @@ RUN npm ci --omit=dev --ignore-scripts
 
 FROM node:24-bookworm-slim
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git openssh-client ca-certificates \
+    # bubblewrap and socat let Claude Code sandbox the agent's shell commands.
+    && apt-get install -y --no-install-recommends git openssh-client ca-certificates bubblewrap socat \
     && rm -rf /var/lib/apt/lists/* \
     # Repositories are mounted from the host and may be owned by a different user id.
     && git config --system safe.directory '*' \

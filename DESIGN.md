@@ -285,8 +285,19 @@ Built in M2 ([`engine/agent/runner.ts`](engine/agent/runner.ts)):
   - Shell commands are allowed, except `git push`, changing remotes, `git worktree` and
     `gh pr/release/repo/api`.
   - Blocked calls show up in the log.
-  - These checks are a safety net, not a sandbox: the worktree isolation and your review before
-    publishing are what keep your work safe.
+  - These checks are a safety net, not a boundary: `git -C . push` or `sh -c "git pu""sh"` get
+    past regexes. The boundary is the sandbox below, plus giving the agent no credentials.
+- **Sandbox** ([`agent/sandbox.ts`](engine/agent/sandbox.ts)): Claude Code's own (bubblewrap
+  and socat on Linux, Seatbelt on macOS), for every shell command:
+  - writes only in the worktree and its git folder;
+  - network only to package registries (`PACKAGE_REGISTRIES`), strictly; GitHub and GitLab are
+    not on the list, so a token couldn't be used even if one leaked;
+  - the app's tokens and the Anthropic key are withheld from the environment, and SSH keys, git
+    and CLI credentials and the app's `secrets.json` are unreadable;
+  - no way out: `allowUnsandboxedCommands: false`, and Bash still goes through the policy.
+  - `sandboxSupport` checks for the tools and that bubblewrap may create namespaces. Where it
+    can't run (Windows, missing tools, Docker without `seccomp=unconfined`), commands run
+    unsandboxed with a note in the task log and in Settings.
 - **Prompt:**
   - Your instruction, plus the repository and branch.
   - Asks the agent to follow the repository's conventions and run its checks, not to commit or
