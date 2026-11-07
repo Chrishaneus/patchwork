@@ -7,8 +7,14 @@ import {
 	type ReviewAttribute,
 	type RunKind
 } from '#lib/engine/contract.js';
-import { decideToolUse } from './agent-policy.js';
-import { isSignInError } from './workflows.js';
+import { decideToolUse } from './policy.js';
+
+/** The agent couldn't sign in to Anthropic (no API key and no Claude login). */
+export function isSignInError(text: string) {
+	return /not logged in|please run \/login|invalid api key|authentication_error|x-api-key/i.test(
+		text
+	);
+}
 
 /** The agent's failure, with a clear message when it simply has no Anthropic credentials. */
 function agentError(text: string) {

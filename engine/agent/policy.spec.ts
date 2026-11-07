@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideToolUse } from './agent-policy';
+import { decideToolUse } from './policy';
 
 const cwd = '/data/worktrees/task-1';
 

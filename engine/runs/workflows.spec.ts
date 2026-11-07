@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	isSignInError,
 	reviewFocus,
 	defaultReviewAttributes,
 	extractJson,
@@ -103,13 +102,5 @@ describe('reviewFocus', () => {
 		);
 		expect(reviewFocus(`${link} is the SQL safe?`)).toBe('is the SQL safe');
 		expect(reviewFocus(undefined)).toBeUndefined();
-	});
-});
-
-describe('isSignInError', () => {
-	it('recognizes a missing login or bad key', () => {
-		expect(isSignInError('Not logged in · Please run /login')).toBe(true);
-		expect(isSignInError('Invalid API key · Fix external API key')).toBe(true);
-		expect(isSignInError('Tool failed: file not found')).toBe(false);
 	});
 });

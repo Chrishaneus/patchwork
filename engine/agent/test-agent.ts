@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { AgentRunner } from './agent.js';
+import type { AgentRunner } from './runner.js';
 
 /**
  * A scripted agent for end-to-end tests (selected with PATCHWORK_TEST_AGENT). It never calls a model.

@@ -2,10 +2,10 @@ import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Task } from '#lib/engine/contract.js';
-import { startFakeGitHub, type FakeGitHub, type FakePull } from '../dev/fake-github';
-import type { AgentRunner } from './agent';
-import { createEngine, type Engine } from './index';
-import { createGitHubLikeRepo, createRepo, run as git, tempDirs } from './test-helpers';
+import { startFakeGitHub, type FakeGitHub, type FakePull } from '../../dev/fake-github';
+import type { AgentRunner } from '../agent/runner';
+import { createEngine, type Engine } from '../index';
+import { createGitHubLikeRepo, createRepo, run as git, tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 const closers: (() => Promise<void>)[] = [];
@@ -211,7 +211,7 @@ describe('publishing', () => {
 
 describe('providerAuthEnv', () => {
 	it('adds the token for HTTPS remotes of the matching provider only', async () => {
-		const { providerAuthEnv } = await import('./providers');
+		const { providerAuthEnv } = await import('../providers/index');
 		const decode = (env: Record<string, string>) =>
 			Buffer.from(env.GIT_CONFIG_VALUE_0.split(' ').pop()!, 'base64').toString();
 

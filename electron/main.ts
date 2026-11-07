@@ -5,9 +5,9 @@ import { existsSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { applyLegacyEnv, migrateDataDir } from '../engine/env';
+import { applyLegacyEnv, migrateDataDir } from '../engine/core/env';
 import { classifyByRules, createEngine, handleEngineCall, type SecretStore } from '../engine/index';
-import { createTestAgent } from '../engine/test-agent';
+import { createTestAgent } from '../engine/agent/test-agent';
 
 applyLegacyEnv();
 

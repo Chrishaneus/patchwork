@@ -5,7 +5,7 @@ import {
 	type PullRequestSummary,
 	type Repository
 } from '#lib/engine/contract.js';
-import { parseRemoteUrl } from './git.js';
+import { parseRemoteUrl } from '../git/git.js';
 import { createGitHubClient, type OpenPullRequestInput } from './github.js';
 import { createGitLabClient } from './gitlab.js';
 

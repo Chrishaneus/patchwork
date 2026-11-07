@@ -4,8 +4,8 @@ import {
 	type GitHubLoginStart,
 	type GitHubRepository
 } from '#lib/engine/contract.js';
-import type { EngineEvents } from './events.js';
-import type { SecretStore } from './secrets.js';
+import type { EngineEvents } from '../core/events.js';
+import type { SecretStore } from '../core/secrets.js';
 
 /**
  * "Sign in with GitHub" using the OAuth device flow of a GitHub App: the user enters a short code

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EngineEvent, Run } from '#lib/engine/contract.js';
 import { createEngine } from '../engine/index';
-import { createTestAgent } from '../engine/test-agent';
+import { createTestAgent } from '../engine/agent/test-agent';
 import { createRepo, tempDirs } from '../engine/test-helpers';
 import { createRequestHandler, type ServerOptions } from './app';
 

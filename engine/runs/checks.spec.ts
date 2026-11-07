@@ -2,9 +2,9 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Task } from '#lib/engine/contract.js';
-import type { AgentRunner } from './agent';
-import { createEngine, type Engine } from './index';
-import { createRepo, tempDirs } from './test-helpers';
+import type { AgentRunner } from '../agent/runner';
+import { createEngine, type Engine } from '../index';
+import { createRepo, tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());

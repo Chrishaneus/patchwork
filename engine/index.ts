@@ -11,28 +11,28 @@ import {
 	type Settings
 } from '#lib/engine/contract.js';
 import { detectAgentMode, findPullRequestLink } from '#lib/agent-mode.js';
-import { createClaudeAgentRunner, type AgentRunner } from './agent.js';
-import { createClaudeModeClassifier, type ModeClassifier } from './classifier.js';
-import { EngineEvents } from './events.js';
-import { TaskLogs } from './logs.js';
-import { parseRemoteUrl } from './git.js';
-import { createGitHubAuth } from './github-auth.js';
-import { providerAuthEnv, providerFor } from './providers.js';
+import { createClaudeAgentRunner, type AgentRunner } from './agent/runner.js';
+import { createClaudeModeClassifier, type ModeClassifier } from './agent/classifier.js';
+import { EngineEvents } from './core/events.js';
+import { TaskLogs } from './core/logs.js';
+import { parseRemoteUrl } from './git/git.js';
+import { createGitHubAuth } from './providers/github-auth.js';
+import { providerAuthEnv, providerFor } from './providers/index.js';
 import {
 	cleanAttributes,
 	defaultReviewAttributes,
 	parsePullRequestUrl,
 	reviewFocus
-} from './workflows.js';
-import { createRepositoryService } from './repositories.js';
-import { createRunService } from './runs.js';
-import { MemorySecretStore, type SecretStore } from './secrets.js';
-import { JsonStore } from './store.js';
+} from './runs/workflows.js';
+import { createRepositoryService } from './repositories/index.js';
+import { createRunService } from './runs/index.js';
+import { MemorySecretStore, type SecretStore } from './core/secrets.js';
+import { JsonStore } from './core/store.js';
 
-export type { AgentRunner } from './agent.js';
-export { classifyByRules, type ModeClassifier } from './classifier.js';
-export { FileSecretStore, type SecretStore } from './secrets.js';
-export { createTestAgent } from './test-agent.js';
+export type { AgentRunner } from './agent/runner.js';
+export { classifyByRules, type ModeClassifier } from './agent/classifier.js';
+export { FileSecretStore, type SecretStore } from './core/secrets.js';
+export { createTestAgent } from './agent/test-agent.js';
 
 export interface EngineOptions {
 	/** Folder for the engine's own data: the store, task logs and worktrees. */

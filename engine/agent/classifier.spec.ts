@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseMode, type ModeClassifier } from './classifier';
-import { createEngine } from './index';
-import { tempDirs } from './test-helpers';
+import { createEngine } from '../index';
+import { tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());

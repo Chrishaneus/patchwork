@@ -16,17 +16,17 @@ import {
 	type TaskChecks,
 	type TaskDiff
 } from '#lib/engine/contract.js';
-import type { AgentRunner } from './agent.js';
+import type { AgentRunner } from '../agent/runner.js';
 import { runCheckCommand } from './checks.js';
-import type { EngineEvents } from './events.js';
-import { git, tryGit } from './git.js';
+import type { EngineEvents } from '../core/events.js';
+import { git, tryGit } from '../git/git.js';
 import {
 	providerAuthEnv,
 	providerFor,
 	pullRequestRef,
 	supportsPullRequests,
 	type ProviderSettings
-} from './providers.js';
+} from '../providers/index.js';
 import {
 	askFollowUpPrompt,
 	askPrompt,
@@ -37,10 +37,10 @@ import {
 	reviewMarkdown,
 	reviewPrompt
 } from './workflows.js';
-import { commitChanges, pushBranch } from './publish.js';
-import type { TaskLogs } from './logs.js';
-import { readStatus } from './repositories.js';
-import type { JsonStore } from './store.js';
+import { commitChanges, pushBranch } from '../git/publish.js';
+import type { TaskLogs } from '../core/logs.js';
+import { readStatus } from '../repositories/index.js';
+import type { JsonStore } from '../core/store.js';
 import {
 	assertValidBranchName,
 	collectDiff,
@@ -49,7 +49,7 @@ import {
 	removeWorktree,
 	removeWorktreeOnly,
 	suggestBranchName
-} from './worktrees.js';
+} from '../git/worktrees.js';
 
 interface RunServiceDeps {
 	store: JsonStore;

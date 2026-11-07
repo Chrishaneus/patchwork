@@ -15,9 +15,9 @@ import {
 	type RepositoryStatus,
 	type RepositoryWithStatus
 } from '#lib/engine/contract.js';
-import { git, parseRemoteUrl, tryGit } from './git.js';
+import { git, parseRemoteUrl, tryGit } from '../git/git.js';
 import { browseFolders, resolveAllowed } from './folders.js';
-import type { JsonStore } from './store.js';
+import type { JsonStore } from '../core/store.js';
 
 async function isDirectory(dir: string): Promise<boolean> {
 	try {

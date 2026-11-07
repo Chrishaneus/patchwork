@@ -289,10 +289,3 @@ export function askFollowUpPrompt(
 		'Answer from the code, read-only, in Markdown. Do not modify any files.'
 	].join('\n\n');
 }
-
-/** The agent couldn't sign in to Anthropic (no API key and no Claude login). */
-export function isSignInError(text: string) {
-	return /not logged in|please run \/login|invalid api key|authentication_error|x-api-key/i.test(
-		text
-	);
-}

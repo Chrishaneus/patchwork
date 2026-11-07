@@ -7,7 +7,7 @@
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { applyLegacyEnv, migrateDataDir } from '../engine/env.js';
+import { applyLegacyEnv, migrateDataDir } from '../engine/core/env.js';
 import {
 	classifyByRules,
 	createEngine,

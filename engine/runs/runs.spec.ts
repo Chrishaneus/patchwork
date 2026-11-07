@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EngineEvent, Task } from '#lib/engine/contract.js';
-import type { AgentRunner } from './agent';
-import { createEngine } from './index';
-import { createRepo, run as git, tempDirs } from './test-helpers';
+import type { AgentRunner } from '../agent/runner';
+import { createEngine } from '../index';
+import { createRepo, run as git, tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());

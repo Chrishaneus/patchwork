@@ -1,8 +1,8 @@
 import { mkdirSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createEngine } from './index';
-import { createRepo, tempDirs } from './test-helpers';
+import { createEngine } from '../index';
+import { createRepo, tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());

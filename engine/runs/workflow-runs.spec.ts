@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AgentRunInput } from './agent';
+import type { AgentRunInput } from '../agent/runner';
 import type { Task } from '#lib/engine/contract.js';
-import { startFakeGitHub, type FakeGitHub } from '../dev/fake-github';
-import type { AgentRunner } from './agent';
-import { createEngine, createTestAgent, type Engine } from './index';
-import { createGitHubLikeRepo, run as git, tempDirs } from './test-helpers';
+import { startFakeGitHub, type FakeGitHub } from '../../dev/fake-github';
+import type { AgentRunner } from '../agent/runner';
+import { createEngine, createTestAgent, type Engine } from '../index';
+import { createGitHubLikeRepo, run as git, tempDirs } from '../test-helpers';
 import { defaultReviewAttributes } from './workflows';
 
 const dirs = tempDirs();

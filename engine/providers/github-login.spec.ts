@@ -2,9 +2,9 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { EngineEvent } from '#lib/engine/contract.js';
-import { startFakeGitHub, type FakeGitHub } from '../dev/fake-github';
-import { createEngine, type Engine } from './index';
-import { createRepo, run as git, tempDirs } from './test-helpers';
+import { startFakeGitHub, type FakeGitHub } from '../../dev/fake-github';
+import { createEngine, type Engine } from '../index';
+import { createRepo, run as git, tempDirs } from '../test-helpers';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());

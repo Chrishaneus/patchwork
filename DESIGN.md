@@ -128,20 +128,15 @@ ai-tool/
 ├── src/               ← UI (SvelteKit)
 │   └── lib/engine/    ← contract.ts (shared types), client.ts (typed client + transports)
 ├── engine/            ← Node engine (no Electron or HTTP imports)
-│   ├── index.ts       ← createEngine + handleEngineCall            (M1, built)
-│   ├── repositories.ts← validate, add, check, remove repositories  (M1, built)
-│   ├── git.ts         ← git runner, remote URL parsing             (M1, built)
-│   ├── store.ts       ← JSON file store                            (M1, built)
-│   ├── runs.ts        ← queue, task lifecycle, cancel/timeout, discard (M2, built)
-│   ├── worktrees.ts   ← create worktrees, collect diffs, clean up  (M2, built)
-│   ├── agent.ts       ← Claude Agent SDK runner, log mapping        (M2, built)
-│   ├── agent-policy.ts← which tool calls the agent may make         (M2, built)
-│   ├── logs.ts, events.ts, secrets.ts                               (M2, built)
-│   ├── publish.ts     ← commit and push                            (M4, built)
-│   ├── github.ts      ← open (or reuse) the pull request           (M4, built)
-│   ├── checks.ts      ← run a repository's check command           (M5, built)
-│   ├── gitlab.ts      ← open/reuse merge requests, read their state (M6, built)
-│   └── providers.ts   ← pick GitHub or GitLab, token, HTTPS push auth (M6, built)
+│   ├── index.ts       ← createEngine + handleEngineCall
+│   ├── core/          ← store (JSON file), events, task logs, secrets, legacy env names
+│   ├── git/           ← git runner and remote URL parsing, worktrees and diffs, commit and push
+│   ├── repositories/  ← validate, add, clone, check, remove repositories; folder browsing
+│   ├── runs/          ← queue, task lifecycle, cancel/timeout, checks, publish, discard;
+│   │                    review/explore/ask prompts and parsing (workflows.ts)
+│   ├── agent/         ← Claude Agent SDK runner, tool policy, Auto-mode classifier, test agent
+│   └── providers/     ← GitHub and GitLab APIs, GitHub sign-in; index.ts picks the provider,
+│                        token and HTTPS push auth
 ├── electron/          ← main.ts, preload.ts (bundled by esbuild to dist-electron/)
 ├── server/            ← Node HTTP server for Docker and mobile      (M3, built)
 ├── dev/               ← fake GitHub + sandbox for trying publishing (M4, built)
@@ -270,7 +265,7 @@ Built in M5:
 
 ## 4. AI agent
 
-Built in M2 ([`engine/agent.ts`](engine/agent.ts)):
+Built in M2 ([`engine/agent/runner.ts`](engine/agent/runner.ts)):
 
 - **SDK:** the **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`), which is Claude Code
   packaged as a library. It runs as a native per-platform binary started by the engine process.
@@ -284,7 +279,7 @@ Built in M2 ([`engine/agent.ts`](engine/agent.ts)):
     settings but not this machine's user settings;
   - `attribution` turned off, so there are no "Generated with" footers;
   - an `AbortController` for cancel and the time limit.
-- **Guardrails** ([`agent-policy.ts`](engine/agent-policy.ts)):
+- **Guardrails** ([`agent/policy.ts`](engine/agent/policy.ts)):
   - File edits are allowed only inside the worktree.
   - Shell commands are allowed, except `git push`, changing remotes, `git worktree` and
     `gh pr/release/repo/api`.
@@ -392,7 +387,7 @@ shadcn-svelte.
       Dashboard shell with the left sidebar and placeholder pages.
 - [x] **M1: Repositories on desktop.**
   - The engine contract, generic transport and typed client (see section 2).
-  - `engine/repositories.ts`, `engine/git.ts` and `engine/store.ts`.
+  - `engine/repositories/`, `engine/git/git.ts` and `engine/core/store.ts`.
   - Electron main and preload scripts in TypeScript.
   - Repositories page: a path field plus the native folder picker. It validates the folder
     (exists, inside a git repository, has a remote, not already added) and lists each repository
