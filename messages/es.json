@@ -449,5 +449,8 @@
 	"agent_start_hint_ask": "Elige repositorios y pregunta lo que quieras. El agente lee el código para responder y no cambia nada. Puedes seguir preguntando.",
 	"agent_repos_hint_ask": "El agente los lee para responder. No se cambia nada.",
 	"run_kind_ask": "Pregunta",
-	"error_agent_not_signed_in": "El agente no tiene sesión en Anthropic. Añade una clave de API en Ajustes → Agente de IA."
+	"error_agent_not_signed_in": "El agente no tiene sesión en Anthropic. Añade una clave de API en Ajustes → Agente de IA.",
+	"agent_reply_auto_hint": "Deja que la IA decida si tu respuesta pide un cambio",
+	"agent_placeholder_switch": "Describe el cambio que quieres…",
+	"agent_switch_hint": "Al enviar, esta conversación se convierte en un cambio: el agente conserva lo dicho, obtiene su propia rama y puede editar archivos. No se publica nada hasta que lo revises."
 }

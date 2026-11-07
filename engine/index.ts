@@ -185,6 +185,7 @@ export function createEngine(options: EngineOptions): Engine {
 		publishTask: (input) => runs.publish(input),
 		runChecks: ({ taskId }) => runs.runChecks(taskId),
 		followUpTask: afterReady(({ taskId, instruction }) => runs.followUp(taskId, instruction)),
+		switchToChange: afterReady(({ runId, instruction }) => runs.switchToChange(runId, instruction)),
 		syncPullRequests: afterReady(() => runs.syncPullRequests()),
 
 		listPullRequests: ({ repositoryId }) => runs.listPullRequests(repositoryId),

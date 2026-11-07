@@ -122,6 +122,11 @@ Click a mode to set it yourself; it stays until you pick Auto again. The modes:
     requests.
 - **Ask:** pick repositories and ask a question. The agent reads the code and answers in the
   conversation: no branch, no changes. Keep asking afterwards.
+  - To act on an answer, reply with the change. Above the reply box, **Auto** lets the model tell
+    whether a reply asks for a change (when it can't answer, replies stay questions); **Ask** or
+    **Change** sets it yourself. A change turns the conversation into a Change, with its own branch
+    and working copy, and the agent keeps what was asked and answered. Explorations can do the
+    same.
 - **Review:** paste a GitHub pull request or GitLab merge request link (pasting one switches to
   Review), or pick an open one under **Pull request**.
   - Anything else you write goes to the agent as what to focus on. A link to a repository you

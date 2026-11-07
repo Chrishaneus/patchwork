@@ -16,12 +16,12 @@
 </script>
 
 <EngineGate>
-	{#snippet children({ runs })}
+	{#snippet children({ runs, connection })}
 		{@const run = runs.run(id)}
 		<div class="grid grid-cols-1 gap-6 xl:grid-cols-[14rem_minmax(0,1fr)]">
 			<aside class="hidden min-w-0 xl:block"><AgentRecent {runs} currentId={id} /></aside>
 			{#if run}
-				{#key run.id}<AgentChat {run} {runs} />{/key}
+				{#key run.id}<AgentChat {run} {runs} client={connection.client} />{/key}
 			{:else if runs.loaded}
 				<EmptyState message={m.run_not_found()} />
 			{/if}

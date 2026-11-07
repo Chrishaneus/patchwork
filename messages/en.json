@@ -449,5 +449,8 @@
 	"agent_start_hint_ask": "Pick repositories and ask anything. The agent reads the code to answer and changes nothing. Keep asking afterwards.",
 	"agent_repos_hint_ask": "The agent reads these to answer. Nothing is changed.",
 	"run_kind_ask": "Question",
-	"error_agent_not_signed_in": "The agent isn't signed in to Anthropic. Add an API key under Settings → AI agent."
+	"error_agent_not_signed_in": "The agent isn't signed in to Anthropic. Add an API key under Settings → AI agent.",
+	"agent_reply_auto_hint": "Let the AI tell whether your reply asks for a change",
+	"agent_placeholder_switch": "Describe the change to make…",
+	"agent_switch_hint": "Sending turns this conversation into a change: the agent keeps what was said, gets its own branch and can edit files. Nothing is published until you review it."
 }

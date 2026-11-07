@@ -79,4 +79,38 @@ describe('buildThread', () => {
 		]);
 		expect(thread.at(-1)!.taskId).toBe('a');
 	});
+
+	it('keeps an exploration that became a change where it was, and its JSON hidden', () => {
+		const exploration = { approaches: [], recommendation: 'Use a map.' };
+		const switched = {
+			id: 'r3',
+			kind: 'code',
+			switchedFrom: { kind: 'explore', at: t(30) },
+			instruction: 'Caching',
+			createdAt: t(0),
+			tasks: [
+				{
+					...task('a', 'api', [{ instruction: 'Build it', at: t(30) }]),
+					review: null,
+					exploration,
+					finishedAt: t(60)
+				}
+			]
+		} as unknown as Run;
+		const thread = buildThread(switched, {
+			a: [
+				entry(10, 'result', 'Two options.\n\n```json\n{}\n```'),
+				entry(31, 'info', 'Switching to a change on the branch ai/build-it-a.'),
+				entry(59, 'result', 'Added the cache.\n\n```json\n{"kept": true}\n```')
+			]
+		});
+		expect(thread.map((i) => [i.kind, i.text])).toEqual([
+			['user', 'Caching'],
+			['assistant', 'Two options.'],
+			['report', ''],
+			['user', 'Build it'],
+			['info', 'Switching to a change on the branch ai/build-it-a.'],
+			['assistant', 'Added the cache.\n\n```json\n{"kept": true}\n```']
+		]);
+	});
 });

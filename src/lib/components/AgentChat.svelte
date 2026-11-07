@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { Path } from '$app/types';
 	import GitPullRequestArrow from '@lucide/svelte/icons/git-pull-request-arrow';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import AgentComposer from '#lib/components/AgentComposer.svelte';
 	import AgentThread from '#lib/components/AgentThread.svelte';
 	import ExplorationReport from '#lib/components/ExplorationReport.svelte';
@@ -12,14 +14,22 @@
 	import MobilePanel from '#lib/components/MobilePanel.svelte';
 	import TaskStatusBadge from '#lib/components/TaskStatusBadge.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import { buildThread } from '#lib/agent-thread.js';
-	import { activeTaskStatuses, type Approach, type Run, type Task } from '#lib/engine/contract.js';
+	import type { EngineClient } from '#lib/engine/client.js';
+	import {
+		activeTaskStatuses,
+		type Approach,
+		type EngineErrorCode,
+		type Run,
+		type Task
+	} from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
 	import type { RunsState } from '#lib/runs.svelte.js';
 
-	let { run, runs }: { run: Run; runs: RunsState } = $props();
+	let { run, runs, client }: { run: Run; runs: RunsState; client: EngineClient } = $props();
 
 	/** 'all', or one task's id. */
 	let tab = $state('all');
@@ -42,9 +52,66 @@
 			: ['completed', 'failed', 'cancelled'].includes(t.status);
 	const replyable = $derived(targets.filter(canReply));
 	const thread = $derived(buildThread(run, runs.logs, tab === 'all' ? undefined : tab));
-	const errors = $derived(targets.map((t) => runs.actionErrors[t.id]).filter(Boolean));
+	let switchError = $state<EngineErrorCode | null>(null);
+	const errors = $derived([
+		...new Set([...targets.map((t) => runs.actionErrors[t.id]), switchError].filter(Boolean))
+	]);
+
+	// A question or exploration can become a change, in this conversation. Auto: the model decides
+	// from your reply. The keyword rules don't count here: most replies they don't recognise would
+	// become changes.
+	type Target = 'reply' | 'change';
+	const switchable = $derived(kind === 'ask' || kind === 'explore');
+	const replyName = () => (kind === 'explore' ? m.agent_mode_explore() : m.agent_mode_ask());
+	let draft = $state('');
+	let auto = $state(true);
+	let target = $state<Target>('reply');
+	let deciding = $state(false);
+	/** The model's answer, for the text it was asked about. */
+	let decided: { text: string; target: Target } | null = null;
+	/** Only the latest question's answer counts. */
+	let question = 0;
+
+	async function decide(message: string): Promise<Target> {
+		const answer = await client.classifyMessage({ text: message }).catch(() => null);
+		return answer?.source === 'ai' && answer.mode === 'change' ? 'change' : 'reply';
+	}
+
+	$effect(() => {
+		const id = ++question;
+		untrack(() => (deciding = false));
+		if (!switchable || !auto) return;
+		const message = draft.trim();
+		if (!message) return;
+		const timer = setTimeout(async () => {
+			if (id !== question) return;
+			deciding = true;
+			const next = await decide(message);
+			if (id !== question) return;
+			deciding = false;
+			decided = { text: message, target: next };
+			target = next;
+		}, 800);
+		return () => clearTimeout(timer);
+	});
 
 	async function reply(text: string) {
+		switchError = null;
+		if (switchable) {
+			let goal = target;
+			if (auto) {
+				// Send what the model says about this exact text; an earlier answer must not land later.
+				const known = decided?.text === text ? decided.target : null;
+				question++;
+				deciding = !known;
+				goal = known ?? (await decide(text));
+				deciding = false;
+			}
+			if (goal === 'change') {
+				switchError = await runs.switchToChange(run.id, text);
+				return !switchError;
+			}
+		}
 		await Promise.all(replyable.map((t) => runs.followUp(t.id, text)));
 		return replyable.every((t) => !runs.actionErrors[t.id]);
 	}
@@ -103,13 +170,58 @@
 			<p class="text-sm text-muted-foreground">{m.agent_cannot_reply()}</p>
 		{/if}
 		<AgentComposer
-			placeholder={kind === 'code' ? m.agent_placeholder_reply() : m.agent_placeholder_question()}
+			placeholder={kind === 'code'
+				? m.agent_placeholder_reply()
+				: switchable && target === 'change'
+					? m.agent_placeholder_switch()
+					: m.agent_placeholder_question()}
+			label={kind === 'code' ? undefined : m.agent_placeholder_question()}
+			bind:text={draft}
 			busy={working}
 			disabled={!working && replyable.length === 0}
 			onSend={reply}
 			onStop={stop}
+			toolbar={switchable ? replyMode : undefined}
 		/>
 	</div>
+
+	{#snippet replyMode()}
+		<div class="flex flex-col gap-1">
+			<ToggleGroup.Root
+				type="single"
+				variant="outline"
+				size="sm"
+				class="self-start"
+				value={auto ? 'auto' : target}
+				onValueChange={(v) => {
+					if (!v) return;
+					if (v === 'auto') auto = true;
+					else {
+						auto = false;
+						target = v as Target;
+					}
+				}}
+				aria-label={m.agent_mode_label()}
+				data-testid="agent-reply-mode"
+				data-mode={target}
+				data-auto={auto}
+			>
+				<ToggleGroup.Item value="auto" title={m.agent_reply_auto_hint()} aria-busy={deciding}
+					>{#if deciding}<LoaderCircle class="animate-spin" />{:else}<Sparkles />{/if}{auto &&
+					draft.trim()
+						? m.agent_mode_auto_detected({
+								mode: target === 'change' ? m.agent_mode_change() : replyName()
+							})
+						: m.agent_mode_auto()}</ToggleGroup.Item
+				>
+				<ToggleGroup.Item value="reply">{replyName()}</ToggleGroup.Item>
+				<ToggleGroup.Item value="change">{m.agent_mode_change()}</ToggleGroup.Item>
+			</ToggleGroup.Root>
+			{#if target === 'change'}
+				<p class="text-xs text-muted-foreground">{m.agent_switch_hint()}</p>
+			{/if}
+		</div>
+	{/snippet}
 
 	<!-- Repositories in this conversation: pick one to talk to it alone, or all of them. -->
 	<MobilePanel

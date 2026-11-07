@@ -303,6 +303,8 @@ export interface Run {
 	attributes?: ReviewAttribute[];
 	/** Review: what the person asked to look at besides the link. */
 	focus?: string;
+	/** A question or exploration that became a change (`switchToChange`), and when. */
+	switchedFrom?: { kind: 'ask' | 'explore'; at: string };
 }
 
 export type LogKind = 'info' | 'assistant' | 'tool' | 'result' | 'error';
@@ -363,6 +365,8 @@ export interface SettingsUpdate {
 export type EngineEvent =
 	| { type: 'task.updated'; task: Task }
 	| { type: 'task.log'; taskId: string; entry: LogEntry }
+	/** A run changed besides its tasks (e.g. it switched to a change). */
+	| { type: 'run.updated'; run: Run }
 	/** Sent by a transport after it reconnects: events may have been missed, reload state. */
 	| { type: 'resync' }
 	/** A repository changed outside a direct call (e.g. cloned while preparing a run). */
@@ -498,6 +502,12 @@ export interface EngineApi {
 	 * cancelled). Returns at once; the task runs again and comes back to review.
 	 */
 	followUpTask(input: { taskId: string; instruction: string }): Promise<Task>;
+	/**
+	 * Turn a finished Ask or Explore conversation into a change, in the same conversation: each
+	 * repository gets a branch and a working copy, and the agent makes `instruction` knowing what
+	 * was asked and answered. Returns at once; the tasks come back to review like any change.
+	 */
+	switchToChange(input: { runId: string; instruction: string }): Promise<Run>;
 	/** Read the state (open, merged, closed) of every open pull request from its provider. */
 	syncPullRequests(input: Record<string, never>): Promise<{ updated: number }>;
 
@@ -570,6 +580,7 @@ export const engineMethods: readonly EngineMethod[] = [
 	'publishTask',
 	'runChecks',
 	'followUpTask',
+	'switchToChange',
 	'syncPullRequests',
 	'listTemplates',
 	'saveTemplate',

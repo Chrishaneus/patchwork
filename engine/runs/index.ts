@@ -22,7 +22,7 @@ import {
 } from '../git/worktrees.js';
 import { readStatus } from '../repositories/index.js';
 import { performChecks } from './checks.js';
-import { executeCodeTask } from './code-task.js';
+import { executeCodeTask, switchPrompt } from './code-task.js';
 import { createRunContext, newTask, type RunServiceDeps } from './context.js';
 import { publishTask, postReview, syncPullRequests } from './publishing.js';
 import { findPullRequestToReview, listPullRequests } from './pull-requests.js';
@@ -38,6 +38,8 @@ export function createRunService(deps: RunServiceDeps) {
 	const { store, findTask, updateTask, log } = ctx;
 	/** Follow-up instructions waiting in the queue, by task id. */
 	const pendingFollowUps = new Map<string, string>();
+	/** Prompts for tasks whose question or exploration just became a change, by task id. */
+	const pendingSwitches = new Map<string, string>();
 	const queue = createTaskQueue(execute, deps.concurrency);
 
 	/** Run one task: the right workflow within the time limit, recording how it ended. */
@@ -49,6 +51,8 @@ export function createRunService(deps: RunServiceDeps) {
 		const say = (text: string) => log(taskId, { kind: 'info', text });
 		const followUp = pendingFollowUps.get(taskId);
 		pendingFollowUps.delete(taskId);
+		const switched = pendingSwitches.get(taskId);
+		pendingSwitches.delete(taskId);
 
 		const clearTimeLimit = startTimeLimit(handle, settings.timeoutMinutes);
 		const run = (await ctx.findRun(task.runId))!;
@@ -56,7 +60,7 @@ export function createRunService(deps: RunServiceDeps) {
 		try {
 			if (!repo) throw new EngineError('repository_not_found', 'The repository was removed.');
 			const input = { taskId, task, run, repo, signal, model: settings.model, say, followUp };
-			if (kind === 'code') await executeCodeTask(ctx, input);
+			if (kind === 'code') await executeCodeTask(ctx, { ...input, switched });
 			else await executeReadOnlyTask(ctx, input);
 		} catch (error) {
 			const reason = handle.reason;
@@ -259,6 +263,74 @@ export function createRunService(deps: RunServiceDeps) {
 			pendingFollowUps.set(taskId, text);
 			queue.enqueue([taskId]);
 			return queued;
+		},
+
+		/** Turn a finished question or exploration into a change, keeping the conversation. */
+		async switchToChange(runId: string, instruction: string): Promise<Run> {
+			const text = instruction?.trim();
+			if (!text) throw new EngineError('invalid_input', 'Describe the change first.');
+			const run = await ctx.findRun(runId);
+			if (!run) throw new EngineError('run_not_found', `Unknown run: ${runId}`);
+			const from = run.kind;
+			if (from !== 'ask' && from !== 'explore') {
+				throw new EngineError(
+					'invalid_state',
+					'Only questions and explorations can become a change.'
+				);
+			}
+			if (run.tasks.some((t) => activeTaskStatuses.includes(t.status))) {
+				throw new EngineError('invalid_state', 'Wait for the agent to finish first.');
+			}
+			const done = run.tasks.filter((t) => ['completed', 'failed', 'cancelled'].includes(t.status));
+			if (done.length === 0) throw new EngineError('invalid_state', 'Nothing here to change.');
+
+			const { repositories } = await store.read();
+			const branches = new Map<string, string>();
+			const prompts = new Map<string, string>();
+			for (const task of done) {
+				const repo = repositories.find((r) => r.id === task.repositoryId);
+				if (!repo) throw new EngineError('repository_not_found', 'The repository was removed.');
+				const branch = suggestBranchName(text, task.id.slice(0, 6));
+				await assertValidBranchName(repo.path, branch);
+				branches.set(task.id, branch);
+				prompts.set(task.id, switchPrompt(run, task, text));
+			}
+
+			const at = new Date().toISOString();
+			const switched = await store.update((data) => {
+				const target = data.runs.find((r) => r.id === runId);
+				if (
+					target?.kind !== from ||
+					target.tasks.some((t) => activeTaskStatuses.includes(t.status))
+				) {
+					throw new EngineError('invalid_state', 'Wait for the agent to finish first.');
+				}
+				target.kind = 'code';
+				target.switchedFrom = { kind: from, at };
+				target.tasks = target.tasks.map((task) =>
+					branches.has(task.id)
+						? {
+								...task,
+								status: 'queued',
+								branch: branches.get(task.id)!,
+								baseCommit: null,
+								worktreePath: null,
+								finishedAt: null,
+								error: null,
+								diffStat: null,
+								followUps: [...(task.followUps ?? []), { instruction: text, at }]
+							}
+						: task
+				);
+				return target;
+			});
+			for (const [id, prompt] of prompts) pendingSwitches.set(id, prompt);
+			deps.events.emit({ type: 'run.updated', run: switched });
+			for (const task of switched.tasks) {
+				if (branches.has(task.id)) deps.events.emit({ type: 'task.updated', task });
+			}
+			queue.enqueue([...branches.keys()]);
+			return switched;
 		},
 
 		syncPullRequests: () => syncPullRequests(ctx),

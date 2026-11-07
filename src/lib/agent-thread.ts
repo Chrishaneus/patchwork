@@ -63,12 +63,19 @@ export function buildThread(
 		}
 	}
 
-	const readOnly = (run.kind ?? 'code') !== 'code';
+	// Read-only answers end with JSON; in a conversation that became a change, only the earlier ones.
+	const readOnlyUntil =
+		(run.kind ?? 'code') !== 'code'
+			? Infinity
+			: run.switchedFrom
+				? Date.parse(run.switchedFrom.at)
+				: -Infinity;
 	for (const task of tasks) {
 		(logs[task.id] ?? []).forEach((entry, index) => {
 			// The follow-up note repeats a message that's already shown as yours.
 			if (entry.kind === 'info' && entry.text.startsWith('Follow-up: ')) return;
 			const kind = entry.kind === 'result' ? 'assistant' : entry.kind;
+			const readOnly = Date.parse(entry.at) < readOnlyUntil;
 			const text = readOnly && kind === 'assistant' ? stripJson(entry.text) : entry.text;
 			if (!text) return;
 			items.push({
@@ -82,9 +89,10 @@ export function buildThread(
 		// The latest report, where it was produced: when the task finished, or just before the
 		// question being answered now.
 		if (task.review || task.exploration) {
-			const lastQuestion = task.followUps?.at(-1)?.at;
+			// After a switch to a change, the report stays where the read-only part ended.
+			const lastQuestion = run.switchedFrom?.at ?? task.followUps?.at(-1)?.at;
 			const at =
-				task.finishedAt ??
+				(!run.switchedFrom && task.finishedAt) ||
 				(lastQuestion ? new Date(Date.parse(lastQuestion) - 1).toISOString() : run.createdAt);
 			items.push({
 				key: `report:${task.id}`,

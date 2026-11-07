@@ -540,6 +540,11 @@ electron:sandbox`.
   - Read-only follow-ups: a question on a finished review or exploration runs in a fresh detached
     copy, with the original task, the previous JSON and the earlier questions. A plain answer
     keeps the report. A changed review clears its posted link so it can be posted again.
+  - From question to change: `switchToChange` turns a finished Ask or Explore run into a code run
+    in place (`switchedFrom` records when). Each repository gets a branch and a worktree, and
+    the agent's first prompt carries the question, the follow-ups and the latest answer (or the
+    exploration). The reply box has Auto / Ask (or Explore) / Change; Auto switches only when
+    the model says "change", never on the keyword rules, which would call most replies changes.
   - The sidebar shows only Agent under Workflows. `/changes/new`, `/review` and `/explore`
     redirect to `/agent?mode=…`.
 - [ ] **Later:** the mobile app as a client for a hosted server. Most of it is built: the HTTP

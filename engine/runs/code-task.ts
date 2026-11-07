@@ -25,6 +25,31 @@ export function followUpPrompt(instruction: string, task: Task, followUp: string
 }
 
 /**
+ * The first prompt after a question or exploration becomes a change: what was asked and found,
+ * read-only, then the change to make now.
+ */
+export function switchPrompt(run: Run, task: Task, change: string): string {
+	const parts = [
+		run.kind === 'explore'
+			? `Earlier you explored this idea in this repository, without changing files:\n\n${run.instruction}`
+			: `Earlier you were asked about this repository and answered without changing files:\n\n${run.instruction}`
+	];
+	const earlier = task.followUps ?? [];
+	if (earlier.length > 0) {
+		parts.push(`Then:\n\n${earlier.map((f) => `- ${f.instruction}`).join('\n')}`);
+	}
+	if (task.exploration) {
+		parts.push(
+			`What you found:\n\n\`\`\`json\n${JSON.stringify(task.exploration, null, 2)}\n\`\`\``
+		);
+	} else if (task.summary) {
+		parts.push(`Your latest answer was:\n\n${task.summary}`);
+	}
+	parts.push(`Now make this change in this working copy; you can edit files now:\n\n${change}`);
+	return parts.join('\n\n');
+}
+
+/**
  * A change: a worktree on a new branch (or the existing one for a follow-up), the agent, the
  * repository's checks, then the task waits for review.
  */
@@ -39,9 +64,11 @@ export async function executeCodeTask(
 		model: string;
 		say: (text: string) => void;
 		followUp?: string;
+		/** The prompt when a question or exploration just became this change. */
+		switched?: string;
 	}
 ) {
-	const { taskId, task, run, repo, signal, say, followUp } = input;
+	const { taskId, task, run, repo, signal, say, followUp, switched } = input;
 	let worktreePath: string;
 	let baseCommit: string;
 	if (followUp && task.worktreePath && task.baseCommit) {
@@ -49,6 +76,7 @@ export async function executeCodeTask(
 		({ worktreePath, baseCommit } = task);
 		say(`Follow-up: ${followUp}`);
 	} else {
+		if (switched) say(`Switching to a change on the branch ${task.branch}.`);
 		await ctx.updateTask(taskId, { status: 'preparing', startedAt: new Date().toISOString() });
 		// Repositories added by URL are cloned the first time a change runs on them.
 		const source = await ctx.prepareSource(repo, say);
@@ -71,9 +99,11 @@ export async function executeCodeTask(
 	if (signal.aborted) throw signal.reason;
 	const result = await ctx.deps.runAgent({
 		cwd: worktreePath,
-		instruction: followUp
-			? followUpPrompt(run.instruction, await ctx.findTask(taskId), followUp)
-			: run.instruction,
+		instruction:
+			switched ??
+			(followUp
+				? followUpPrompt(run.instruction, await ctx.findTask(taskId), followUp)
+				: run.instruction),
 		repository: repo,
 		branch: task.branch,
 		baseBranch: task.baseBranch,
@@ -86,9 +116,9 @@ export async function executeCodeTask(
 	const before = await ctx.findTask(taskId);
 	await ctx.updateTask(taskId, {
 		summary: result.summary,
-		// Follow-ups add to the cost and turns of the earlier work.
-		costUsd: followUp ? addUsage(before.costUsd, result.costUsd) : result.costUsd,
-		turns: followUp ? addUsage(before.turns, result.turns) : result.turns
+		// Follow-ups (and the conversation before a switch) add to the earlier cost and turns.
+		costUsd: followUp || switched ? addUsage(before.costUsd, result.costUsd) : result.costUsd,
+		turns: followUp || switched ? addUsage(before.turns, result.turns) : result.turns
 	});
 
 	const command = (await ctx.findRepository(repo.id))?.checkCommand;

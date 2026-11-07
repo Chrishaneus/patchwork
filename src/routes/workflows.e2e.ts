@@ -184,10 +184,31 @@ test('a question gets a read-only answer, not a branch', async ({ page }) => {
 
 	// Ask again in the same conversation.
 	const reply = page.getByRole('textbox', { name: 'Ask a question about this…' });
-	await reply.fill('And where are the tests?');
+	const replyMode = page.getByTestId('agent-reply-mode');
+	await reply.fill('Where are the tests?');
+	await expect(replyMode).toContainText('Auto: Ask');
 	await reply.press('Enter');
-	await expect(thread.locator('[data-kind="user"]').last()).toContainText(
-		'And where are the tests?'
-	);
+	await expect(thread.locator('[data-kind="user"]').last()).toContainText('Where are the tests?');
 	await expect(page.getByTestId('agent-task')).toHaveAttribute('data-task-status', 'completed');
+
+	// Picking Ask yourself keeps a reply read-only, whatever it says.
+	await replyMode.getByText('Ask', { exact: true }).click();
+	await reply.fill('Add a test for it');
+	await expect(replyMode).toHaveAttribute('data-mode', 'reply');
+	await expect(page.getByText('Sending turns this conversation into a change')).toHaveCount(0);
+
+	// Auto sees a change request and switches in the same conversation: a branch, edits, review.
+	await replyMode.getByText('Auto').click();
+	await reply.fill('Add a page about the tests');
+	await expect(replyMode).toContainText('Auto: Change');
+	await expect(page.getByText('Sending turns this conversation into a change')).toBeVisible();
+	await reply.press('Enter');
+	await expect(page.getByTestId('agent-task')).toHaveAttribute(
+		'data-task-status',
+		'awaiting_review'
+	);
+	await expect(thread).toContainText('Switching to a change on the branch ai/add-a-page-about');
+	await expect(thread.locator('[data-kind="user"]')).toHaveCount(3);
+	await expect(replyMode).toHaveCount(0);
+	await expect(page.getByRole('textbox', { name: 'Reply to the agent…' })).toBeVisible();
 });

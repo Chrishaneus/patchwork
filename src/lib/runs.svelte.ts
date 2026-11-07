@@ -31,6 +31,7 @@ export class RunsState {
 		events((event) => {
 			if (event.type === 'task.updated') this.applyTask(event.task);
 			else if (event.type === 'task.log') this.logs[event.taskId]?.push(event.entry);
+			else if (event.type === 'run.updated') this.applyRun(event.run);
 			else void this.resync();
 		});
 	}
@@ -123,6 +124,18 @@ export class RunsState {
 		return this.act(taskId, () => this.client.followUpTask({ taskId, instruction }));
 	}
 
+	/** Turn a finished question or exploration into a change, in the same conversation. */
+	async switchToChange(runId: string, instruction: string) {
+		const run = this.run(runId);
+		for (const task of run?.tasks ?? []) delete this.actionErrors[task.id];
+		try {
+			this.applyRun(await this.client.switchToChange({ runId, instruction }));
+			return null;
+		} catch (error) {
+			return toCode(error);
+		}
+	}
+
 	syncing = $state(false);
 
 	/** Ask the providers for the latest PR states; updates arrive as task events. */
@@ -166,6 +179,12 @@ export class RunsState {
 		} catch (error) {
 			this.actionErrors[taskId] = toCode(error);
 		}
+	}
+
+	private applyRun(run: Run) {
+		const index = this.runs.findIndex((r) => r.id === run.id);
+		if (index === -1) this.runs = [run, ...this.runs];
+		else this.runs[index] = run;
 	}
 
 	private applyTask(task: Task) {

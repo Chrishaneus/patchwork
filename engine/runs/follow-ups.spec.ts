@@ -94,6 +94,105 @@ describe('follow-ups', () => {
 		expect(done.checks?.status).toBe('passed');
 	});
 
+	it('turns a question into a change in the same conversation, keeping what was said', async () => {
+		const calls: AgentRunInput[] = [];
+		let answers = 0;
+		const {
+			engine,
+			task: change,
+			repo
+		} = await engineWithRepo(async (input) => {
+			calls.push(input);
+			if (input.mode === 'ask') return { summary: `Answer ${++answers}.`, costUsd: 0.1, turns: 1 };
+			writeFileSync(path.join(input.cwd, 'cache.txt'), 'cache\n');
+			return { summary: 'Added a cache.', costUsd: 0.5, turns: 3 };
+		});
+		const run = await engine.startAsk({ repositoryIds: [repo.id], question: 'Is there a cache?' });
+		const asked = await waitFor(engine, run.tasks[0].id, ['completed']);
+		await engine.followUpTask({ taskId: asked.id, instruction: 'Where would one go?' });
+		await waitFor(engine, asked.id, ['completed']);
+
+		const events: string[] = [];
+		engine.subscribe((e) => {
+			if (e.type === 'run.updated') events.push(e.run.kind ?? '');
+		});
+		const switched = await engine.switchToChange({ runId: run.id, instruction: 'Add one' });
+		expect(switched).toMatchObject({ kind: 'code', switchedFrom: { kind: 'ask' } });
+		expect(switched.tasks[0]).toMatchObject({
+			status: 'queued',
+			branch: expect.stringMatching(/^ai\/add-one-/)
+		});
+		expect(events).toEqual(['code']);
+		const done = await waitFor(engine, asked.id, ['awaiting_review', 'failed']);
+
+		const prompt = calls.at(-1)!;
+		expect(prompt.mode).toBeUndefined();
+		expect(prompt.instruction).toContain('Is there a cache?');
+		expect(prompt.instruction).toContain('- Where would one go?');
+		expect(prompt.instruction).toContain('Your latest answer was:\n\nAnswer 2.');
+		expect(prompt.instruction).toContain('you can edit files now:\n\nAdd one');
+		expect(done).toMatchObject({
+			status: 'awaiting_review',
+			summary: 'Added a cache.',
+			diffStat: { files: 1 },
+			costUsd: 0.7,
+			turns: 5,
+			followUps: [{ instruction: 'Where would one go?' }, { instruction: 'Add one' }]
+		});
+		expect(git(repo.path, 'branch', '--list', done.branch)).toContain(done.branch);
+		const log = await engine.getTaskLog({ taskId: asked.id });
+		expect(log.map((e) => e.text)).toContain(`Switching to a change on the branch ${done.branch}.`);
+
+		// Changes keep working as changes: follow-ups continue in the new working copy.
+		await engine.followUpTask({ taskId: done.id, instruction: 'Also document it' });
+		expect(await waitFor(engine, done.id, ['awaiting_review'])).toMatchObject({
+			worktreePath: done.worktreePath
+		});
+
+		await expect(
+			engine.switchToChange({ runId: run.id, instruction: 'again' })
+		).rejects.toMatchObject({ code: 'invalid_state' });
+		await expect(
+			engine.switchToChange({ runId: change.runId, instruction: 'x' })
+		).rejects.toMatchObject({ code: 'invalid_state' });
+		await expect(engine.switchToChange({ runId: 'nope', instruction: 'x' })).rejects.toMatchObject({
+			code: 'run_not_found'
+		});
+	});
+
+	it('turns an exploration into a change with what it found, only once it has finished', async () => {
+		const prompts: string[] = [];
+		const { engine, repo } = await engineWithRepo(async (input) => {
+			prompts.push(input.instruction);
+			if (input.mode === 'explore') {
+				await new Promise((r) => setTimeout(r, 50));
+				return {
+					summary:
+						'```json\n{"approaches":[{"title":"Memory cache","summary":"An in-memory map.","effort":"small","files":[],"pros":[],"cons":[]}],"recommendation":"Memory cache."}\n```',
+					costUsd: 0,
+					turns: 1
+				};
+			}
+			return { summary: 'Done.', costUsd: 0, turns: 1 };
+		});
+		const run = await engine.startExplore({ repositoryIds: [repo.id], idea: 'Caching' });
+		await expect(
+			engine.switchToChange({ runId: run.id, instruction: 'Build it' })
+		).rejects.toMatchObject({ code: 'invalid_state' });
+		await waitFor(engine, run.tasks[0].id, ['completed']);
+		await expect(engine.switchToChange({ runId: run.id, instruction: ' ' })).rejects.toMatchObject({
+			code: 'invalid_input'
+		});
+
+		await engine.switchToChange({ runId: run.id, instruction: 'Build the memory cache' });
+		const done = await waitFor(engine, run.tasks[0].id, ['awaiting_review', 'failed']);
+		expect(done.status).toBe('awaiting_review');
+		expect(done.exploration?.approaches[0].title).toBe('Memory cache');
+		expect(prompts.at(-1)).toContain('Earlier you explored this idea');
+		expect(prompts.at(-1)).toContain('"title": "Memory cache"');
+		expect(prompts.at(-1)).toContain('Build the memory cache');
+	});
+
 	it('works on failed tasks that kept their working copy, but not on published ones', async () => {
 		let calls = 0;
 		const flaky: AgentRunner = async ({ cwd }) => {
