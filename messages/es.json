@@ -472,5 +472,20 @@
 	"approval_once_only": "Este comando ejecuta un shell, un intérprete o varios programas, así que solo puede permitirse una vez.",
 	"repo_allowed_programs": "Siempre permitidos fuera del entorno aislado:",
 	"repo_disallow_program": "Dejar de permitir {program}",
-	"agent_switch_hint": "Al enviar, esta conversación se convierte en un cambio: el agente conserva lo dicho, obtiene su propia rama y puede editar archivos. No se publica nada hasta que lo revises."
+	"agent_switch_hint": "Al enviar, esta conversación se convierte en un cambio: el agente conserva lo dicho, obtiene su propia rama y puede editar archivos. No se publica nada hasta que lo revises.",
+	"data_recovery_title": "No se pudieron leer algunos datos guardados",
+	"data_recovery_restored": "El archivo de datos estaba dañado, así que se restauró desde la copia hecha cuando la app se inició por última vez. Se perdieron los cambios desde entonces.",
+	"data_recovery_reset": "El archivo de datos estaba dañado y no había una copia utilizable, así que la app se inició sin sus repositorios ni conversaciones.",
+	"data_recovery_partial": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "No se pudo leer {count} elemento guardado y se omitió. Sigue en el archivo de datos.",
+				"countPlural=*": "No se pudieron leer {count} elementos guardados y se omitieron. Siguen en el archivo de datos."
+			}
+		}
+	],
+	"data_recovery_kept": "El archivo dañado se guardó como {path}.",
+	"data_recovery_dismiss": "Descartar"
 }

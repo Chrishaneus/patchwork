@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -86,5 +86,96 @@ describe('Store', () => {
 		expect(existsSync(legacy)).toBe(false);
 		expect(JSON.parse(readFileSync(`${legacy}.imported`, 'utf8')).runs).toHaveLength(1);
 		expect((await new Store(dir).read()).runs.map((r) => r.id)).toEqual(['r1']);
+	});
+});
+
+describe('Store recovery', () => {
+	const until = async (check: () => boolean) => {
+		for (let i = 0; i < 500 && !check(); i++) await new Promise((r) => setTimeout(r, 20));
+		expect(check()).toBe(true);
+	};
+	const damage = (dir: string) => {
+		const file = path.join(dir, 'patchwork.db');
+		for (const suffix of ['-wal', '-shm']) rmSync(file + suffix, { force: true });
+		writeFileSync(file, 'not a database, just garbage '.repeat(200));
+	};
+	const asideIn = (dir: string, prefix: string) =>
+		readdirSync(dir).filter(
+			(name) => name.startsWith(`${prefix}.corrupt-`) && !/-(wal|shm)$/.test(name)
+		);
+
+	it('restores a damaged database from the copy made at the last start', async () => {
+		const dir = dirs.make('patchwork-store-');
+		const first = new Store(dir);
+		await first.update((data) => data.runs.unshift(run('r1')));
+		first.close();
+		// The next start backs it up.
+		const second = new Store(dir);
+		await second.update((data) => data.runs.unshift(run('r2')));
+		await until(() => existsSync(path.join(dir, 'patchwork.db.bak')));
+		second.close();
+
+		damage(dir);
+		const store = new Store(dir);
+		const data = await store.read();
+		expect(data.runs.map((r) => r.id)).toEqual(['r1']);
+		const [aside] = asideIn(dir, 'patchwork.db');
+		expect(store.recovery).toEqual({
+			kind: 'restored',
+			movedTo: path.join(dir, aside),
+			skipped: 0
+		});
+		await store.update((d) => d.runs.unshift(run('r3')));
+		expect((await new Store(dir).read()).runs.map((r) => r.id)).toEqual(['r3', 'r1']);
+	});
+
+	it('starts empty when the database is damaged and there is no copy', async () => {
+		const dir = dirs.make('patchwork-store-');
+		const first = new Store(dir);
+		await first.update((data) => data.runs.unshift(run('r1')));
+		first.close();
+		damage(dir);
+		const store = new Store(dir);
+		expect((await store.read()).runs).toEqual([]);
+		expect(store.recovery).toMatchObject({ kind: 'reset' });
+		expect(asideIn(dir, 'patchwork.db')).toHaveLength(1);
+	});
+
+	it('starts empty when data.json is damaged, keeping it aside', async () => {
+		const dir = dirs.make('patchwork-store-');
+		writeFileSync(path.join(dir, 'data.json'), '{"version":1,"runs":[');
+		const store = new Store(dir);
+		expect((await store.read()).runs).toEqual([]);
+		expect(store.recovery).toMatchObject({ kind: 'reset' });
+		const [aside] = asideIn(dir, 'data.json');
+		expect(readFileSync(path.join(dir, aside), 'utf8')).toBe('{"version":1,"runs":[');
+	});
+
+	it('leaves out rows it can’t read, without deleting them', async () => {
+		const dir = dirs.make('patchwork-store-');
+		const first = new Store(dir);
+		await first.update((data) => data.runs.unshift(run('r1'), run('r2')));
+		first.close();
+		const db = new DatabaseSync(path.join(dir, 'patchwork.db'));
+		db.prepare("UPDATE runs SET data = '{broken' WHERE id = 'r2'").run();
+		db.close();
+
+		const store = new Store(dir);
+		expect((await store.read()).runs.map((r) => r.id)).toEqual(['r1']);
+		expect(store.recovery).toEqual({ kind: 'partial', movedTo: null, skipped: 1 });
+		await store.update((data) => (data.runs[0].instruction = 'still saves'));
+		store.close();
+		const check = new DatabaseSync(path.join(dir, 'patchwork.db'));
+		expect(check.prepare("SELECT data FROM runs WHERE id = 'r2'").get()).toEqual({
+			data: '{broken'
+		});
+		check.close();
+	});
+
+	it('doesn’t move the data aside for errors that aren’t damage', async () => {
+		const dir = dirs.make('patchwork-store-');
+		mkdirSync(path.join(dir, 'patchwork.db'));
+		await expect(new Store(dir).read()).rejects.toThrow();
+		expect(asideIn(dir, 'patchwork.db')).toEqual([]);
 	});
 });

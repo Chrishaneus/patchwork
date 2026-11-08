@@ -442,6 +442,14 @@ Built in M4:
     file (about 70 ms).
   - A `data.json` from before the database is imported on first start and kept as
     `data.json.imported`.
+  - Damaged data doesn't stop the app. Each start with a healthy database saves a copy
+    (`patchwork.db.bak`, through SQLite's backup API). If the database is damaged at start
+    (SQLite error 11 or 26, or `PRAGMA quick_check` fails), it's renamed to
+    `patchwork.db.corrupt-<time>` and the copy is used, or else the app starts empty. A damaged
+    `data.json` is set aside the same way. Rows that can't be parsed are left out but stay in
+    the database. Other errors, such as a locked or unreadable file, still stop the engine, so
+    nothing is moved aside by mistake. What happened is in `getEngineInfo().dataRecovery`, and
+    every page shows it until dismissed.
   - Runs are still never pruned, and all of them are loaded into memory.
 - **Secrets** (API keys, tokens), behind a `SecretStore` interface each host implements:
   - Desktop: one file in the app's data folder, readable only by your user. Secrets are encrypted

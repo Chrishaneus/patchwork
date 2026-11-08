@@ -1,4 +1,5 @@
 import { connectEngine, type EngineConnection } from '#lib/engine/client.js';
+import type { DataRecovery } from '#lib/engine/contract.js';
 import { RepositoriesState } from '#lib/app/repositories.svelte.js';
 import { RunsState } from '#lib/app/runs.svelte.js';
 
@@ -30,6 +31,8 @@ class AppEngine {
 	runs = $state.raw<RunsState | null>(null);
 	/** Set when the last access token was rejected. */
 	tokenRejected = $state(false);
+	/** What the engine did about damaged saved data at start, until dismissed. */
+	dataRecovery = $state<DataRecovery | null>(null);
 
 	async connect(token = readToken()) {
 		this.status = 'connecting';
@@ -40,6 +43,10 @@ class AppEngine {
 			this.repositories = new RepositoriesState(connection.client, connection.events);
 			this.runs = new RunsState(connection.client, connection.events);
 			this.status = 'ready';
+			connection.client
+				.getEngineInfo({})
+				.then((info) => (this.dataRecovery = info.dataRecovery))
+				.catch(() => undefined);
 		} else {
 			this.status = result.status;
 		}

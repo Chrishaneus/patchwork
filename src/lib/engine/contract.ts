@@ -75,6 +75,20 @@ export interface EngineInfo {
 	localPaths: boolean;
 	/** Folders local repositories must be inside; empty means anywhere (desktop). */
 	repositoryRoots: string[];
+	/** Set when the saved data was damaged at start, and what was done about it. */
+	dataRecovery: DataRecovery | null;
+}
+
+/**
+ * `restored`: the data file was damaged and was restored from the copy made when the app last
+ * started. `reset`: it was damaged with no usable copy, so the app started empty. `partial`:
+ * `skipped` saved items couldn't be read and are left out. `movedTo` is where the damaged file
+ * was kept.
+ */
+export interface DataRecovery {
+	kind: 'restored' | 'reset' | 'partial';
+	movedTo: string | null;
+	skipped: number;
 }
 
 export interface FolderEntry {

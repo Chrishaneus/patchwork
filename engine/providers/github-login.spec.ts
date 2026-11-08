@@ -201,7 +201,11 @@ describe('adding repositories by URL', () => {
 			pullRequestSyncMs: 0,
 			localPaths: false
 		});
-		expect(await engine.getEngineInfo({})).toEqual({ localPaths: false, repositoryRoots: [] });
+		expect(await engine.getEngineInfo({})).toEqual({
+			localPaths: false,
+			repositoryRoots: [],
+			dataRecovery: null
+		});
 
 		await expect(engine.addRepository({ path: createRepo(dirs.make()) })).rejects.toMatchObject({
 			code: 'local_paths_disabled'

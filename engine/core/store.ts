@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, renameSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { backup, DatabaseSync } from 'node:sqlite';
 import type {
+	DataRecovery,
 	InstructionTemplate,
 	Repository,
 	ReviewAttribute,
@@ -49,6 +50,27 @@ const COLLECTIONS: { name: Collection; newestFirst: boolean }[] = [
 	{ name: 'templates', newestFirst: false }
 ];
 
+/** `PRAGMA quick_check` found damage. */
+class CorruptData extends Error {}
+
+/** SQLite's "database disk image is malformed" (11) and "file is not a database" (26). */
+function isCorrupt(error: unknown) {
+	if (error instanceof CorruptData) return true;
+	const { code, errcode } = error as { code?: string; errcode?: number };
+	return (
+		code === 'ERR_SQLITE_ERROR' &&
+		(((errcode ?? 0) & 0xff) === 11 || ((errcode ?? 0) & 0xff) === 26)
+	);
+}
+
+function parseOrNull(json: string): unknown {
+	try {
+		return JSON.parse(json);
+	} catch {
+		return null;
+	}
+}
+
 /** A row as it is on disk: its place in the list and its JSON. */
 type SavedRow = { seq: number; json: string };
 
@@ -69,6 +91,8 @@ export class Store {
 		templates: new Map()
 	};
 	private savedSettings = '';
+	/** Set when the saved data couldn't all be read at start, for the UI to tell the user. */
+	recovery: DataRecovery | null = null;
 
 	constructor(private readonly dataDir: string) {
 		this.file = path.join(dataDir, 'patchwork.db');
@@ -98,9 +122,45 @@ export class Store {
 		return run;
 	}
 
+	/** Close the database; the next `read` opens it again. */
+	close() {
+		this.closeDatabase();
+		this.data = null;
+	}
+
 	private open(): StoreData {
 		mkdirSync(this.dataDir, { recursive: true });
+		try {
+			const { data, existed } = this.load();
+			if (existed) this.backUp();
+			return data;
+		} catch (error) {
+			if (!isCorrupt(error)) throw error;
+		}
+		// The database is damaged: keep it aside, then use the backup, else start empty.
+		const movedTo = this.moveAside(this.file);
+		const backup = `${this.file}.bak`;
+		if (existsSync(backup)) {
+			copyFileSync(backup, this.file);
+			try {
+				const { data } = this.load();
+				this.recovery = { kind: 'restored', movedTo, skipped: this.recovery?.skipped ?? 0 };
+				return data;
+			} catch (error) {
+				if (!isCorrupt(error)) throw error;
+				this.removeDatabase();
+			}
+		}
+		const { data } = this.load();
+		this.recovery = { kind: 'reset', movedTo, skipped: 0 };
+		return data;
+	}
+
+	/** Open the database and read everything; `existed` is false for a new one. */
+	private load(): { data: StoreData; existed: boolean } {
+		this.closeDatabase();
 		const db = new DatabaseSync(this.file);
+		this.db = db;
 		db.exec(`
 			PRAGMA journal_mode = WAL;
 			PRAGMA synchronous = NORMAL;
@@ -110,25 +170,70 @@ export class Store {
 					`CREATE TABLE IF NOT EXISTS ${name} (id TEXT PRIMARY KEY, seq INTEGER NOT NULL, data TEXT NOT NULL);`
 			).join('\n')}
 		`);
-		this.db = db;
+		const check = db.prepare('PRAGMA quick_check').all() as { quick_check: string }[];
+		if (check.length !== 1 || check[0].quick_check !== 'ok') throw new CorruptData();
 
 		const meta = db.prepare('SELECT value FROM meta WHERE key = ?');
-		if (!meta.get('version')) return this.importJson();
+		if (!meta.get('version')) return { data: this.importJson(), existed: false };
 
 		const data = emptyData();
+		let skipped = 0;
 		for (const { name, newestFirst } of COLLECTIONS) {
 			const rows = db
 				.prepare(`SELECT id, seq, data FROM ${name} ORDER BY seq ${newestFirst ? 'DESC' : 'ASC'}`)
 				.all() as { id: string; seq: number; data: string }[];
-			for (const row of rows) this.saved[name].set(row.id, { seq: row.seq, json: row.data });
-			(data[name] as unknown[]) = rows.map((row) => JSON.parse(row.data));
+			const items: unknown[] = [];
+			for (const row of rows) {
+				// An unreadable row stays in the database, untouched, and is left out here.
+				const item = parseOrNull(row.data);
+				if (item === null) {
+					skipped++;
+					continue;
+				}
+				this.saved[name].set(row.id, { seq: row.seq, json: row.data });
+				items.push(item);
+			}
+			(data[name] as unknown[]) = items;
 		}
 		const settings = meta.get('settings') as { value: string } | undefined;
 		if (settings) {
 			this.savedSettings = settings.value;
-			data.settings = { ...data.settings, ...JSON.parse(settings.value) };
+			data.settings = { ...data.settings, ...(parseOrNull(settings.value) ?? {}) };
 		}
-		return data;
+		if (skipped > 0) this.recovery = { kind: 'partial', movedTo: null, skipped };
+		return { data, existed: true };
+	}
+
+	/** A copy of the database as it was at start, to recover from if it's damaged later. */
+	private backUp() {
+		const target = `${this.file}.bak`;
+		const partial = `${target}.partial`;
+		backup(this.db!, partial)
+			.then(() => renameSync(partial, target))
+			.catch(() => undefined);
+	}
+
+	/** Rename a damaged file (and SQLite's journal files next to it); returns the new name. */
+	private moveAside(file: string) {
+		this.closeDatabase();
+		const target = `${file}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+		renameSync(file, target);
+		for (const suffix of ['-wal', '-shm']) {
+			if (existsSync(file + suffix)) renameSync(file + suffix, target + suffix);
+		}
+		return target;
+	}
+
+	private removeDatabase() {
+		this.closeDatabase();
+		for (const suffix of ['', '-wal', '-shm']) rmSync(this.file + suffix, { force: true });
+	}
+
+	private closeDatabase() {
+		if (this.db?.isOpen) this.db.close();
+		this.db = null;
+		this.savedSettings = '';
+		for (const { name } of COLLECTIONS) this.saved[name].clear();
 	}
 
 	/**
@@ -144,11 +249,19 @@ export class Store {
 			Object.assign(data, saved, { settings: { ...data.settings, ...saved.settings } });
 			imported = true;
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+			if (error instanceof SyntaxError) {
+				this.recovery = { kind: 'reset', movedTo: this.moveJsonAside(legacy), skipped: 0 };
+			} else if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
 		}
 		this.save(data);
 		if (imported) renameSync(legacy, `${legacy}.imported`);
 		return data;
+	}
+
+	private moveJsonAside(file: string) {
+		const target = `${file}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+		renameSync(file, target);
+		return target;
 	}
 
 	/** Write just the touched rows; false when one isn't on disk yet, so everything is compared. */

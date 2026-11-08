@@ -174,7 +174,10 @@ export function createEngine(options: EngineOptions): Engine {
 		listRepositoryCandidates: () => repositories.candidates(),
 		addRepositoryFromUrl: ({ url, clone }) => repositories.addFromUrl(url, clone),
 		cloneRepository: ({ id }) => repositories.clone(id),
-		getEngineInfo: async () => repositories.info(),
+		getEngineInfo: async () => {
+			await store.read().catch(() => undefined);
+			return { ...repositories.info(), dataRecovery: store.recovery };
+		},
 		browseFolders: ({ path }) => repositories.browse(path),
 
 		startGitHubLogin: () => githubAuth.start(),

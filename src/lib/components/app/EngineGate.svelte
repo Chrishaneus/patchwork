@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import AccessTokenForm from '#lib/components/app/AccessTokenForm.svelte';
+	import DataRecoveryNotice from '#lib/components/app/DataRecoveryNotice.svelte';
 	import EngineUnavailableNotice from '#lib/components/app/EngineUnavailableNotice.svelte';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 	import { appEngine } from '#lib/app/app-engine.svelte.js';
@@ -19,6 +20,12 @@
 </script>
 
 {#if appEngine.status === 'ready' && appEngine.connection && appEngine.repositories && appEngine.runs}
+	{#if appEngine.dataRecovery}
+		<DataRecoveryNotice
+			recovery={appEngine.dataRecovery}
+			onDismiss={() => (appEngine.dataRecovery = null)}
+		/>
+	{/if}
 	{@render children({
 		connection: appEngine.connection,
 		repositories: appEngine.repositories,

@@ -472,5 +472,20 @@
 	"approval_once_only": "This command runs a shell, an interpreter or several programs, so it can only be allowed once.",
 	"repo_allowed_programs": "Always allowed outside the sandbox:",
 	"repo_disallow_program": "Stop allowing {program}",
-	"agent_switch_hint": "Sending turns this conversation into a change: the agent keeps what was said, gets its own branch and can edit files. Nothing is published until you review it."
+	"agent_switch_hint": "Sending turns this conversation into a change: the agent keeps what was said, gets its own branch and can edit files. Nothing is published until you review it.",
+	"data_recovery_title": "Some saved data couldn’t be read",
+	"data_recovery_restored": "The data file was damaged, so it was restored from the copy made when the app last started. Changes since then are lost.",
+	"data_recovery_reset": "The data file was damaged and there was no usable copy, so the app started without its repositories and conversations.",
+	"data_recovery_partial": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} saved item couldn’t be read and is left out. It stays in the data file.",
+				"countPlural=*": "{count} saved items couldn’t be read and are left out. They stay in the data file."
+			}
+		}
+	],
+	"data_recovery_kept": "The damaged file was kept as {path}.",
+	"data_recovery_dismiss": "Dismiss"
 }
