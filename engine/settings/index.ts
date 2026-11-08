@@ -7,13 +7,13 @@ import {
 } from '#lib/engine/contract.js';
 import { codexSandboxSupport, setUpCodexSandbox } from '../agent/codex/index.js';
 import { sandboxSupport, type SandboxSupport } from '../agent/sandbox.js';
-import type { JsonStore } from '../core/store.js';
+import type { Store } from '../core/store.js';
 import { cleanAttributes, defaultReviewAttributes } from '../runs/workflows.js';
 import type { Credentials } from './credentials.js';
 
 /** The Settings page: model, limits, review attributes, credentials and the GitHub App. */
 export function createSettingsService(opts: {
-	store: JsonStore;
+	store: Store;
 	credentials: Credentials;
 	/** GitHub App client ID from the environment; one saved in Settings wins. */
 	envGitHubClientId?: string;

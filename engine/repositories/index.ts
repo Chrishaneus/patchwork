@@ -18,7 +18,7 @@ import {
 import { git, parseRemoteUrl, tryGit } from '../git/git.js';
 import { browseFolders, resolveAllowed } from './folders.js';
 import { programOf } from '../agent/approvals.js';
-import type { JsonStore } from '../core/store.js';
+import type { Store } from '../core/store.js';
 
 async function isDirectory(dir: string): Promise<boolean> {
 	try {
@@ -187,7 +187,7 @@ export function validateCloneUrl(url: string, localPaths: boolean): string {
 	return value;
 }
 
-export function createRepositoryService(store: JsonStore, options: RepositoryServiceOptions) {
+export function createRepositoryService(store: Store, options: RepositoryServiceOptions) {
 	const roots = options.roots ?? [];
 	const resolvedRoots = roots.map((r) => path.resolve(r));
 	const localPaths = options.localPaths ?? true;

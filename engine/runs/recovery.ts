@@ -1,9 +1,9 @@
 import { activeTaskStatuses, type Task } from '#lib/engine/contract.js';
 import type { EngineEvents } from '../core/events.js';
-import type { JsonStore } from '../core/store.js';
+import type { Store } from '../core/store.js';
 
 /** Tasks that were working when the app last quit can't resume; mark them interrupted. */
-export async function recoverInterrupted(store: JsonStore, events: EngineEvents) {
+export async function recoverInterrupted(store: Store, events: EngineEvents) {
 	const { runs } = await store.read();
 	const anyActive = runs.some((run) =>
 		run.tasks.some((t) => activeTaskStatuses.includes(t.status))

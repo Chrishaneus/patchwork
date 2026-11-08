@@ -18,7 +18,7 @@ import type { AgentRunner } from './agent/runner.js';
 import { EngineEvents } from './core/events.js';
 import { TaskLogs } from './core/logs.js';
 import { MemorySecretStore, type SecretStore } from './core/secrets.js';
-import { JsonStore } from './core/store.js';
+import { Store } from './core/store.js';
 import { parseRemoteUrl } from './git/git.js';
 import { createGitHubAuth } from './providers/github-auth.js';
 import { providerAuthEnv } from './providers/index.js';
@@ -70,7 +70,7 @@ export interface Engine extends EngineApi {
 
 /** Create the engine. Hosts (Electron main, the HTTP server) wrap it with `handleEngineCall`. */
 export function createEngine(options: EngineOptions): Engine {
-	const store = new JsonStore(options.dataDir);
+	const store = new Store(options.dataDir);
 	const secrets = options.secrets ?? new MemorySecretStore();
 	const events = new EngineEvents();
 	const githubAuth = createGitHubAuth({

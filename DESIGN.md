@@ -129,7 +129,7 @@ ai-tool/
 │   └── lib/engine/    ← contract.ts (shared types), client.ts (typed client + transports)
 ├── engine/            ← Node engine (no Electron or HTTP imports)
 │   ├── index.ts       ← createEngine + handleEngineCall
-│   ├── core/          ← store (JSON file), events, task logs, secrets, legacy env names
+│   ├── core/          ← store (SQLite), events, task logs, secrets, legacy env names
 │   ├── git/           ← git runner and remote URL parsing, worktrees and diffs, commit and push
 │   ├── repositories/  ← validate, add, clone, check, remove repositories; folder browsing
 │   ├── runs/          ← queue, task lifecycle, cancel/timeout, checks, publish, discard;
@@ -429,10 +429,20 @@ Built in M4:
 
 ## 6. Storage and secrets
 
-- **Data:** start with one JSON file holding repositories, runs and tasks:
+- **Data:** repositories, runs (with their tasks), templates and settings in SQLite
+  (`patchwork.db`, through Node's built-in `node:sqlite`, so there's no native module to build
+  for Electron), [`core/store.ts`](engine/core/store.ts):
   - in Electron's `app.getPath('userData')` on desktop;
   - in a `/data` volume in Docker.
-  - Move to SQLite (e.g. `better-sqlite3`) once run history needs queries.
+  - One row per repository, run and template, each as JSON, plus the settings. The engine
+    still sees the whole data in memory and changes it in `store.update`. Only the rows that
+    differ from what's on disk are written, in one transaction. A change that names the rows it
+    changed (`touch`, used by `updateTask`, the most frequent one) skips comparing the rest. With
+    3,000 runs (10 MB), a task update takes about 1 ms to save instead of rewriting the whole
+    file (about 70 ms).
+  - A `data.json` from before the database is imported on first start and kept as
+    `data.json.imported`.
+  - Runs are still never pruned, and all of them are loaded into memory.
 - **Secrets** (API keys, tokens), behind a `SecretStore` interface each host implements:
   - Desktop: one file in the app's data folder, readable only by your user. Secrets are encrypted
     with Electron `safeStorage` when the system has a keychain. On systems without one (WSL, bare

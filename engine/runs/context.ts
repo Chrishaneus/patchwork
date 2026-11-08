@@ -10,11 +10,11 @@ import type { AgentRunner } from '../agent/runner.js';
 import { createApprovals } from './approvals.js';
 import type { EngineEvents } from '../core/events.js';
 import type { TaskLogs } from '../core/logs.js';
-import type { JsonStore } from '../core/store.js';
+import type { Store } from '../core/store.js';
 import { providerAuthEnv, providerFor, type ProviderSettings } from '../providers/index.js';
 
 export interface RunServiceDeps {
-	store: JsonStore;
+	store: Store;
 	logs: TaskLogs;
 	events: EngineEvents;
 	runAgent: AgentRunner;
@@ -103,11 +103,12 @@ export function createRunContextBase(deps: RunServiceDeps) {
 	}
 
 	async function updateTask(taskId: string, change: Partial<Task>): Promise<Task> {
-		const task = await store.update((data) => {
+		const task = await store.update((data, touch) => {
 			for (const run of data.runs) {
 				const index = run.tasks.findIndex((t) => t.id === taskId);
 				if (index !== -1) {
 					run.tasks[index] = { ...run.tasks[index], ...change };
+					touch('runs', run.id);
 					return run.tasks[index];
 				}
 			}

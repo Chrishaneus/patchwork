@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { EngineError, type InstructionTemplate } from '#lib/engine/contract.js';
-import type { JsonStore } from '../core/store.js';
+import type { Store } from '../core/store.js';
 
 /** Saved instructions you can start a change from. */
-export function createTemplateService(store: JsonStore) {
+export function createTemplateService(store: Store) {
 	return {
 		async list(): Promise<InstructionTemplate[]> {
 			return [...(await store.read()).templates].sort((a, b) => a.name.localeCompare(b.name));
