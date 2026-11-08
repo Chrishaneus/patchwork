@@ -450,6 +450,14 @@ Built in M4:
     the database. Other errors, such as a locked or unreadable file, still stop the engine, so
     nothing is moved aside by mistake. What happened is in `getEngineInfo().dataRecovery`, and
     every page shows it until dismissed.
+  - Migrations: `meta.version` says what shape the data has. `MIGRATIONS` in `core/store.ts` is
+    a numbered list of steps (`to: 2`, `3`, …). Each changes the data in place (`data`) and,
+    when needed, the tables (`db`). At start, the steps newer than the saved version run on the
+    data as it was saved, and the result and the new version are written in one transaction.
+    Before that, the database is copied as `patchwork.db.v<old version>.bak`. An imported
+    `data.json` goes through the same steps. Data from a newer Patchwork (a higher version)
+    stops the engine with `data_too_new` rather than being changed. Add a step before changing
+    the shape of anything saved. There are none yet, so the version is 1.
   - Runs are still never pruned, and all of them are loaded into memory.
 - **Secrets** (API keys, tokens), behind a `SecretStore` interface each host implements:
   - Desktop: one file in the app's data folder, readable only by your user. Secrets are encrypted

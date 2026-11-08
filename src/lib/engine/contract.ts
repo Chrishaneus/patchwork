@@ -451,6 +451,7 @@ export interface RepositoryCandidates {
 }
 
 export type EngineErrorCode =
+	| 'data_too_new'
 	| 'path_not_found'
 	| 'not_a_git_repository'
 	| 'no_remote'

@@ -1,12 +1,13 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
-import type {
-	DataRecovery,
-	InstructionTemplate,
-	Repository,
-	ReviewAttribute,
-	Run
+import {
+	EngineError,
+	type DataRecovery,
+	type InstructionTemplate,
+	type Repository,
+	type ReviewAttribute,
+	type Run
 } from '#lib/engine/contract.js';
 
 export interface StoredSettings {
@@ -26,7 +27,8 @@ export const defaultSettings: StoredSettings = {
 };
 
 export interface StoreData {
-	version: 1;
+	/** The shape of the data: the `to` of the last migration it went through, or 1. */
+	version: number;
 	repositories: Repository[];
 	runs: Run[];
 	settings: StoredSettings;
@@ -40,6 +42,23 @@ const emptyData = (): StoreData => ({
 	settings: { ...defaultSettings },
 	templates: []
 });
+
+/**
+ * One step in upgrading saved data, run once at start on data older than `to`. Add one, with
+ * the next number, before changing the shape of anything saved; the change works on the data as
+ * it was saved, so don't use the current types' guarantees in it.
+ */
+export interface Migration {
+	/** The version the data has after this step; the first step is 2. */
+	to: number;
+	/** Change the data in place. */
+	data?: (data: StoreData) => void;
+	/** Change the tables, for what the data can't express (runs before `data`). */
+	db?: (db: DatabaseSync) => void;
+}
+
+/** Every migration so far, in order. */
+export const MIGRATIONS: Migration[] = [];
 
 export type Collection = 'repositories' | 'runs' | 'templates';
 
@@ -91,11 +110,23 @@ export class Store {
 		templates: new Map()
 	};
 	private savedSettings = '';
+	private savedVersion = 0;
+	/** The version this app writes. */
+	readonly version: number;
+	/** Settles when the copy made at start is written (or failed). */
+	backedUp: Promise<void> = Promise.resolve();
 	/** Set when the saved data couldn't all be read at start, for the UI to tell the user. */
 	recovery: DataRecovery | null = null;
 
-	constructor(private readonly dataDir: string) {
+	constructor(
+		private readonly dataDir: string,
+		private readonly migrations: Migration[] = MIGRATIONS
+	) {
 		this.file = path.join(dataDir, 'patchwork.db');
+		migrations.forEach((m, i) => {
+			if (m.to !== i + 2) throw new Error(`Migration ${i + 1} must go to version ${i + 2}.`);
+		});
+		this.version = migrations.at(-1)?.to ?? 1;
 	}
 
 	async read(): Promise<StoreData> {
@@ -174,9 +205,14 @@ export class Store {
 		if (check.length !== 1 || check[0].quick_check !== 'ok') throw new CorruptData();
 
 		const meta = db.prepare('SELECT value FROM meta WHERE key = ?');
-		if (!meta.get('version')) return { data: this.importJson(), existed: false };
+		const saved = meta.get('version') as { value: string } | undefined;
+		if (!saved) return { data: this.importJson(), existed: false };
+		const version = Number(saved.value) || 1;
+		this.refuseNewer(version);
+		this.savedVersion = version;
 
 		const data = emptyData();
+		data.version = version;
 		let skipped = 0;
 		for (const { name, newestFirst } of COLLECTIONS) {
 			const rows = db
@@ -201,14 +237,45 @@ export class Store {
 			data.settings = { ...data.settings, ...(parseOrNull(settings.value) ?? {}) };
 		}
 		if (skipped > 0) this.recovery = { kind: 'partial', movedTo: null, skipped };
+		this.migrate(data, true);
 		return { data, existed: true };
+	}
+
+	/** Data from a newer Patchwork would be damaged by this one's changes. */
+	private refuseNewer(version: number) {
+		if (version > this.version) {
+			throw new EngineError(
+				'data_too_new',
+				`This data was saved by a newer version of Patchwork (data version ${version}, this one knows ${this.version}). Update Patchwork to open it.`
+			);
+		}
+	}
+
+	/**
+	 * Bring older data up to this version and save it, in one transaction. An existing database
+	 * is copied first, as `patchwork.db.v<version>.bak`, in case a migration goes wrong.
+	 */
+	private migrate(data: StoreData, existed: boolean) {
+		const steps = this.migrations.filter((m) => m.to > data.version);
+		if (steps.length === 0) return;
+		if (existed) {
+			const copy = `${this.file}.v${data.version}.bak`;
+			rmSync(copy, { force: true });
+			this.db!.prepare('VACUUM INTO ?').run(copy);
+		}
+		const tables = steps.flatMap((m) => (m.db ? [() => m.db!(this.db!)] : []));
+		for (const step of steps) {
+			step.data?.(data);
+			data.version = step.to;
+		}
+		this.save(data, tables);
 	}
 
 	/** A copy of the database as it was at start, to recover from if it's damaged later. */
 	private backUp() {
 		const target = `${this.file}.bak`;
 		const partial = `${target}.partial`;
-		backup(this.db!, partial)
+		this.backedUp = backup(this.db!, partial)
 			.then(() => renameSync(partial, target))
 			.catch(() => undefined);
 	}
@@ -233,6 +300,7 @@ export class Store {
 		if (this.db?.isOpen) this.db.close();
 		this.db = null;
 		this.savedSettings = '';
+		this.savedVersion = 0;
 		for (const { name } of COLLECTIONS) this.saved[name].clear();
 	}
 
@@ -246,13 +314,18 @@ export class Store {
 		let imported = false;
 		try {
 			const saved = JSON.parse(readFileSync(legacy, 'utf8')) as Partial<StoreData>;
-			Object.assign(data, saved, { settings: { ...data.settings, ...saved.settings } });
+			Object.assign(data, saved, {
+				version: saved.version ?? 1,
+				settings: { ...data.settings, ...saved.settings }
+			});
 			imported = true;
 		} catch (error) {
 			if (error instanceof SyntaxError) {
 				this.recovery = { kind: 'reset', movedTo: this.moveJsonAside(legacy), skipped: 0 };
 			} else if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
 		}
+		this.refuseNewer(data.version);
+		this.migrate(data, false);
 		this.save(data);
 		if (imported) renameSync(legacy, `${legacy}.imported`);
 		return data;
@@ -298,10 +371,10 @@ export class Store {
 		}
 	}
 
-	/** Write the rows that differ from what's on disk. */
-	private save(data: StoreData) {
+	/** Write the rows that differ from what's on disk, after `first` (in the same transaction). */
+	private save(data: StoreData, first: (() => void)[] = []) {
 		const db = this.db!;
-		const writes: (() => void)[] = [];
+		const writes: (() => void)[] = [...first];
 		const after: (() => void)[] = [];
 
 		for (const { name, newestFirst } of COLLECTIONS) {
@@ -328,16 +401,18 @@ export class Store {
 				after.push(() => saved.delete(id));
 			}
 		}
+		const set = db.prepare(
+			'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+		);
 		const settings = JSON.stringify(data.settings);
 		if (settings !== this.savedSettings) {
-			const set = db.prepare(
-				'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-			);
-			writes.push(() => {
-				set.run('version', String(data.version));
-				set.run('settings', settings);
-			});
+			writes.push(() => set.run('settings', settings));
 			after.push(() => (this.savedSettings = settings));
+		}
+		if (data.version !== this.savedVersion) {
+			const version = data.version;
+			writes.push(() => set.run('version', String(version)));
+			after.push(() => (this.savedVersion = version));
 		}
 		if (writes.length === 0) return;
 		this.transaction(writes);
