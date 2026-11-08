@@ -32,8 +32,11 @@ export function claudeSandbox(policy: SandboxPolicy, cwd: string, canAsk = false
 		autoAllowBashIfSandboxed: false,
 		allowUnsandboxedCommands: canAsk,
 		network: { allowedDomains: policy.allowedDomains, strictAllowlist: true },
-		// Claude Code already lets commands write in the working directory.
-		filesystem: { allowWrite: policy.writable.filter((dir) => dir !== cwd) },
+		// Claude Code lets commands write in the working directory unless it's denied.
+		filesystem: {
+			allowWrite: policy.writable.filter((dir) => dir !== cwd),
+			...(policy.writable.includes(cwd) ? {} : { denyWrite: [cwd] })
+		},
 		credentials: {
 			envVars: policy.deniedEnv.map((name) => ({ name, mode: 'deny' as const })),
 			files: policy.deniedFiles.map((file) => ({ path: file, mode: 'deny' as const }))

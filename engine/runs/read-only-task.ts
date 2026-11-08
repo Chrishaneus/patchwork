@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { EngineError, type Repository, type ReviewResult, type Run } from '#lib/engine/contract.js';
 import { git, tryGit } from '../git/git.js';
-import { removeWorktreeOnly } from '../git/worktrees.js';
+import { removeWorktreeOnly, setWritable } from '../git/worktrees.js';
 import { pullRequestRef } from '../providers/index.js';
 import { addUsage, type RunContext } from './context.js';
 import {
@@ -87,6 +87,8 @@ export async function executeReadOnlyTask(
 		);
 	}
 	await ctx.updateTask(taskId, { worktreePath, baseCommit });
+	// Read-only on disk too, for agents whose commands can't be sandboxed here.
+	await setWritable(worktreePath, false);
 	if (signal.aborted) throw signal.reason;
 
 	await ctx.updateTask(taskId, { status: 'running' });

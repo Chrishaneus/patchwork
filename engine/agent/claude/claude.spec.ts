@@ -13,6 +13,13 @@ describe('claudeSandbox', () => {
 		expect(claudeSandbox(policy, '/wt', true).allowUnsandboxedCommands).toBe(true);
 	});
 
+	it('lets read-only workflows write nowhere, not even the working directory', () => {
+		expect(claudeSandbox({ ...policy, writable: [] }, '/wt').filesystem).toEqual({
+			allowWrite: [],
+			denyWrite: ['/wt']
+		});
+	});
+
 	it('enforces the policy with no way around it', () => {
 		expect(claudeSandbox(policy, '/wt')).toEqual({
 			enabled: true,

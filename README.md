@@ -141,8 +141,10 @@ Click a mode to set it yourself; it stays until you pick Auto again. The modes:
   approaches: files touched, pros and cons, effort, and a recommendation.
   - **Build this approach** starts a change with that approach, in a new conversation.
 
-Questions, reviews and explorations never change your code. The agent works in a detached, read-only copy
-where file edits are blocked, and the copy is removed when it finishes. You can keep asking
+Questions, reviews and explorations never change your code. The agent works in a detached copy
+of the repository, which is removed when it finishes. Its file-editing tools are turned off, and
+the sandbox (below) lets its shell commands write nowhere. The copy's files are also read-only on
+disk; without a sandbox that stops ordinary edits, though a command could deliberately undo it. You can keep asking
 questions afterwards: each one gets a fresh copy, and the agent updates the report if its view
 changed. An updated review can be posted again.
 

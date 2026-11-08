@@ -1,4 +1,5 @@
-import { rm, stat } from 'node:fs/promises';
+import { chmod, lstat, readdir, rm, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { tmpdir } from 'node:os';
 import {
 	EngineError,
@@ -130,8 +131,31 @@ export async function diffBetween(repoPath: string, base: string, head: string):
 	return { stat, patch: truncated ? patch.slice(0, MAX_PATCH_BYTES) : patch, truncated };
 }
 
-/** Remove a worktree but keep its branch (after publishing). */
+/**
+ * Make every file and folder in a working copy read-only, or writable again. For read-only
+ * workflows when commands can't be sandboxed: it stops `sed -i`, `rm` or `> file`, though a
+ * command could still change the permissions back. Symlinks are skipped, since chmod follows them.
+ */
+export async function setWritable(dir: string, writable: boolean): Promise<void> {
+	const info = await lstat(dir);
+	if (info.isSymbolicLink()) return;
+	const mode = writable ? info.mode | 0o200 : info.mode & ~0o222;
+	if (writable) await chmod(dir, mode & 0o7777);
+	if (info.isDirectory()) {
+		for (const entry of await readdir(dir)) await setWritable(path.join(dir, entry), writable);
+	}
+	if (!writable) await chmod(dir, mode & 0o7777);
+}
+
+/** Whether `setWritable(dir, false)` was used on this working copy. */
+async function isReadOnly(dir: string) {
+	const info = await stat(dir).catch(() => null);
+	return !!info && (info.mode & 0o200) === 0;
+}
+
+/** Remove a worktree but keep its branch (after publishing, or a read-only workflow's copy). */
 export async function removeWorktreeOnly(repo: Repository, worktreePath: string) {
+	if (await isReadOnly(worktreePath)) await setWritable(worktreePath, true).catch(() => {});
 	await tryGit(repo.path, ['worktree', 'remove', '--force', worktreePath]);
 	await rm(worktreePath, { recursive: true, force: true });
 	await tryGit(repo.path, ['worktree', 'prune']);

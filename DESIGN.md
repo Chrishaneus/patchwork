@@ -307,7 +307,13 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
     unsandboxed with a note in the task log and in Settings.
   - The rules are agent-neutral: `sandboxPolicy` returns the writable folders (none for the
     read-only workflows), allowed hosts, denied files and denied environment variables, and each
-    runner enforces them its own way. `claudeSandbox` (in `claude/`) turns them into the SDK's
+    runner enforces them its own way. Claude Code's sandbox always lets commands write in the
+    working directory, so read-only workflows also put it in `denyWrite`.
+  - Read-only workflows: besides the denied file tools and the sandbox, their copy is made
+    read-only on disk (`setWritable` in `git/worktrees.ts`) for agents whose commands can't be
+    sandboxed here. That stops `sed -i`, `rm` or `> file`, but a command could change the
+    permissions back, so only the sandbox makes it a boundary. `removeWorktreeOnly` makes the
+    copy writable again before removing it. `claudeSandbox` (in `claude/`) turns them into the SDK's
     `sandbox` option, `codexSandbox` into Codex's (below). A future agent without a usable
     sandbox could run whole inside `@anthropic-ai/sandbox-runtime` (`srt`) with the same policy.
 - **Running a command outside the sandbox:** when a task can't do something inside the sandbox
@@ -576,7 +582,8 @@ electron:sandbox`.
     browser and Electron.
 - [x] **Workflows: Review PR and Explore:**
   - Runs have a `kind`: `code`, `review` or `explore`. Read-only kinds get a detached worktree
-    (no branch), the agent in read-only mode (file tools denied), and a JSON answer parsed onto
+    (no branch), read-only on disk and in the sandbox, the agent in read-only mode (file tools
+    denied), and a JSON answer parsed onto
     the task (`review` or `exploration`). They finish as `completed`, and the copy is removed
     when they end.
   - Reviews fetch the PR head through `pull/N/head` (GitHub) or `merge-requests/N/head` (GitLab),

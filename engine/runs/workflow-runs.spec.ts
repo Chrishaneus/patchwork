@@ -241,9 +241,19 @@ describe('ask workflow', () => {
 	it('answers a question read-only, without a branch, and takes follow-ups', async () => {
 		const prompts: string[] = [];
 		const scripted = createTestAgent('edit');
+		const writes: string[] = [];
 		const { engine, repo, added } = await withPullRequest(async (input) => {
 			prompts.push(input.instruction);
 			expect(input.mode).toBe('ask');
+			// The copy is read-only on disk, for agents whose commands can't be sandboxed.
+			for (const target of ['README.md', 'new.txt']) {
+				try {
+					writeFileSync(path.join(input.cwd, target), 'changed\n');
+					writes.push(target);
+				} catch {
+					// Expected.
+				}
+			}
 			return scripted(input);
 		});
 		const branches = git(repo.dir, 'branch', '--list');
@@ -256,6 +266,8 @@ describe('ask workflow', () => {
 		expect(task).toMatchObject({ status: 'completed', worktreePath: null, error: null });
 		expect(task.summary).toContain('Can you explain what widgets is?');
 		expect(git(repo.dir, 'branch', '--list')).toBe(branches);
+		expect(writes).toEqual(process.platform === 'win32' ? ['new.txt'] : []);
+		expect(git(repo.dir, 'worktree', 'list').split('\n')).toHaveLength(1);
 
 		await engine.followUpTask({ taskId: task.id, instruction: 'And how is it tested?' });
 		const again = await waitFor(engine, task.id, ['completed', 'failed']);
