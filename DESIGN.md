@@ -296,7 +296,7 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
   - network only to package registries (`PACKAGE_REGISTRIES`), strictly; GitHub and GitLab are
     not on the list, so a token couldn't be used even if one leaked;
   - the app's tokens and the Anthropic key are withheld from the environment, and SSH keys, git
-    and CLI credentials and the app's `secrets.json` are unreadable. `credentialFiles` finds them
+    and CLI credentials and the app's `secrets.json` (and `secrets.json.d/`) are unreadable. `credentialFiles` finds them
     where each tool keeps them per platform (`%APPDATA%`, Application Support, `XDG_CONFIG_HOME`,
     `GH_CONFIG_DIR` and the like). Under WSL the Windows profiles in `/mnt/c/Users` are covered
     too; Windows programs can't be started from inside the sandbox (WSL interop needs a socket
@@ -467,6 +467,11 @@ Built in M4:
   - Server: `ANTHROPIC_API_KEY` from the environment, or a key saved in Settings. The key is kept
     in a file in the private `/data` volume, readable only by the server's user, not encrypted, and
     the Settings page says so.
+  - Both hosts write the file through `SecretsFile`. Saves happen one at a time, and each writes a
+    temporary file and renames it over the old one, so a crash or two saves at once never lose
+    keys. A file that can't be parsed is set aside, so the keys can still be recovered from it,
+    rather than being saved over. Any other read error fails the save. The temporary and set-aside
+    copies are kept in `secrets.json.d/`, which agents' commands can't read either.
   - Secrets are never sent to the UI after they are saved.
 
 ## 7. UI

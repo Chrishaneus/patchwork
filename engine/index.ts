@@ -17,7 +17,7 @@ import { createAgentRunner } from './agent/agents.js';
 import type { AgentRunner } from './agent/runner.js';
 import { EngineEvents } from './core/events.js';
 import { TaskLogs } from './core/logs.js';
-import { MemorySecretStore, type SecretStore } from './core/secrets.js';
+import { MemorySecretStore, secretsFolder, type SecretStore } from './core/secrets.js';
 import { Store } from './core/store.js';
 import { parseRemoteUrl } from './git/git.js';
 import { createGitHubAuth } from './providers/github-auth.js';
@@ -30,7 +30,7 @@ import { createTemplateService } from './settings/templates.js';
 
 export type { AgentRunner } from './agent/runner.js';
 export { classifyByRules, type ModeClassifier } from './agent/classifier.js';
-export { FileSecretStore, type SecretStore } from './core/secrets.js';
+export { FileSecretStore, SecretsFile, type SecretStore } from './core/secrets.js';
 export { createTestAgent } from './agent/test-agent.js';
 export { findCodexBinary } from './agent/codex/index.js';
 
@@ -108,8 +108,11 @@ export function createEngine(options: EngineOptions): Engine {
 			createAgentRunner({
 				claudeExecutable: options.agentExecutable,
 				codexExecutable: options.codexExecutable,
-				// Hosts keep saved tokens here (FileSecretStore).
-				protectedFiles: [path.join(options.dataDir, 'secrets.json')]
+				// Hosts keep saved tokens here (FileSecretStore), with its temporary copies.
+				protectedFiles: [
+					path.join(options.dataDir, 'secrets.json'),
+					secretsFolder(path.join(options.dataDir, 'secrets.json'))
+				]
 			}),
 		getApiKey: (model) => credentials.getApiKey(providerOf(model)),
 		providers: {

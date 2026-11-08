@@ -2,7 +2,6 @@
 // and hosts the engine behind one generic IPC channel.
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from 'electron';
 import { existsSync, statSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { applyLegacyEnv, migrateDataDir } from '../engine/core/env';
@@ -11,6 +10,7 @@ import {
 	createEngine,
 	findCodexBinary,
 	handleEngineCall,
+	SecretsFile,
 	type SecretStore
 } from '../engine/index';
 import { createTestAgent } from '../engine/agent/test-agent';
@@ -50,17 +50,11 @@ function serveBuild() {
  */
 function createFileSecrets(file: string): SecretStore {
 	const encrypted = safeStorage.isEncryptionAvailable();
-	const readAll = async (): Promise<Record<string, string>> => {
-		try {
-			return JSON.parse(await readFile(file, 'utf8'));
-		} catch {
-			return {};
-		}
-	};
+	const secrets = new SecretsFile(file);
 	return {
 		encrypted,
 		async get(name) {
-			const stored = (await readAll())[name];
+			const stored = (await secrets.read())[name];
 			if (!stored) return null;
 			if (stored.startsWith('plain:')) return stored.slice('plain:'.length);
 			if (!stored.startsWith('enc:') || !safeStorage.isEncryptionAvailable()) return null;
@@ -71,14 +65,16 @@ function createFileSecrets(file: string): SecretStore {
 			}
 		},
 		async set(name, value) {
-			const all = await readAll();
-			if (value === null) delete all[name];
-			else
-				all[name] = encrypted
-					? `enc:${safeStorage.encryptString(value).toString('base64')}`
-					: `plain:${value}`;
-			await mkdir(path.dirname(file), { recursive: true });
-			await writeFile(file, JSON.stringify(all), { mode: 0o600 });
+			const stored =
+				value === null
+					? null
+					: encrypted
+						? `enc:${safeStorage.encryptString(value).toString('base64')}`
+						: `plain:${value}`;
+			await secrets.update((all) => {
+				if (stored === null) delete all[name];
+				else all[name] = stored;
+			});
 		}
 	};
 }
