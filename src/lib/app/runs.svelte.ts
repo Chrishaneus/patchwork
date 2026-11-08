@@ -1,6 +1,7 @@
 import type { EngineClient } from '#lib/engine/client.js';
 import {
 	EngineError,
+	type ApprovalAnswer,
 	type EngineErrorCode,
 	type EngineEventSource,
 	type LogEntry,
@@ -109,6 +110,11 @@ export class RunsState {
 
 	async loadDiff(taskId: string) {
 		this.diffs[taskId] = await this.client.getTaskDiff({ taskId });
+	}
+
+	/** Answer the agent's request to run a command outside the sandbox. */
+	answerApproval(taskId: string, approvalId: string, answer: ApprovalAnswer) {
+		return this.act(taskId, () => this.client.answerApproval({ taskId, approvalId, answer }));
 	}
 
 	cancel(taskId: string) {

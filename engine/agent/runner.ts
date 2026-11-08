@@ -1,11 +1,18 @@
 import type { LogEntry, Repository, ReviewAttribute, RunKind } from '#lib/engine/contract.js';
 
-/** What every agent is told when its shell commands are sandboxed. */
-export const SANDBOX_GUIDANCE = [
-	'Shell commands run in a sandbox: they can write only inside this working copy and reach only',
-	'package registries (npm, PyPI, crates.io and the like), not GitHub or GitLab. If a command',
-	'fails because of that, say so in your summary rather than working around it.'
-].join('\n');
+/**
+ * What every agent is told when its shell commands are sandboxed; `canAsk` when it can ask the
+ * user to run one command outside the sandbox (`requestApproval`).
+ */
+export function sandboxGuidance(canAsk: boolean) {
+	return [
+		'Shell commands run in a sandbox: they can write only inside this working copy and reach only',
+		'package registries (npm, PyPI, crates.io and the like), not GitHub or GitLab.',
+		canAsk
+			? 'If a command the task really needs fails because of that, you may ask to run that one command outside the sandbox: the user sees the exact command and decides. Ask only when there is no way inside the sandbox, never to push, open pull requests or reach the GitHub or GitLab APIs, and say why in one sentence. If the user declines, carry on without it and mention it in your summary.'
+			: 'If a command fails because of that, say so in your summary rather than working around it.'
+	].join('\n');
+}
 
 const LONG_COMMANDS = [
 	'Commands such as installs, builds and test runs can take several minutes and print nothing for',
@@ -28,6 +35,11 @@ export interface AgentRunInput {
 	mode?: RunKind;
 	/** Review workflow: the attributes asked for (so test agents can answer in shape). */
 	attributes?: ReviewAttribute[];
+	/**
+	 * Ask the user to let one command run outside the sandbox; resolves to whether they allowed
+	 * it. Runners call it when their agent asks; missing when nobody can answer.
+	 */
+	requestApproval?: (request: { command: string; reason: string | null }) => Promise<boolean>;
 }
 
 export interface AgentRunOutput {

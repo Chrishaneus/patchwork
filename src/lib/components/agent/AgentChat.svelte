@@ -13,6 +13,7 @@
 	import { approachInstruction } from '#lib/components/explore/approach.js';
 	import MobilePanel from '#lib/components/shared/MobilePanel.svelte';
 	import TaskStatusBadge from '#lib/components/runs/TaskStatusBadge.svelte';
+	import ApprovalCard from '#lib/components/runs/ApprovalCard.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import { buildThread } from '#lib/components/agent/agent-thread.js';
@@ -162,6 +163,16 @@
 				{/if}
 			{/snippet}
 		</AgentThread>
+
+		{#each targets as task (task.id)}
+			{#if task.approval}
+				<ApprovalCard
+					approval={task.approval}
+					repository={run.tasks.length > 1 ? task.repositoryName : undefined}
+					onAnswer={(answer) => runs.answerApproval(task.id, task.approval!.id, answer)}
+				/>
+			{/if}
+		{/each}
 
 		{#each errors as code (code)}
 			<p role="alert" class="text-sm text-destructive">{engineErrorMessage(code!)}</p>

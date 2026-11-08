@@ -13,6 +13,7 @@
 	import PublishDialog from '#lib/components/runs/PublishDialog.svelte';
 	import PullRequestLink from '#lib/components/runs/PullRequestLink.svelte';
 	import TaskLog from '#lib/components/runs/TaskLog.svelte';
+	import ApprovalCard from '#lib/components/runs/ApprovalCard.svelte';
 	import TaskStatusBadge from '#lib/components/runs/TaskStatusBadge.svelte';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -178,6 +179,14 @@
 		{/if}
 		{#if actionError}
 			<p class="mb-3 text-sm text-destructive" role="alert">{engineErrorMessage(actionError)}</p>
+		{/if}
+		{#if task.approval}
+			<div class="mb-3">
+				<ApprovalCard
+					approval={task.approval}
+					onAnswer={(answer) => runs.answerApproval(task.id, task.approval!.id, answer)}
+				/>
+			</div>
 		{/if}
 		{#if task.publishError && task.status === 'awaiting_review'}
 			<p class="mb-3 text-sm text-destructive" role="alert" data-testid="publish-error">

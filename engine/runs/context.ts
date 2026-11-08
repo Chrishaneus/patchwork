@@ -7,6 +7,7 @@ import {
 	type Task
 } from '#lib/engine/contract.js';
 import type { AgentRunner } from '../agent/runner.js';
+import { createApprovals } from './approvals.js';
 import type { EngineEvents } from '../core/events.js';
 import type { TaskLogs } from '../core/logs.js';
 import type { JsonStore } from '../core/store.js';
@@ -28,6 +29,8 @@ export interface RunServiceDeps {
 	addRepositoryFromUrl: (url: string) => Promise<Repository>;
 	/** How many tasks may run at the same time, at first; see `setConcurrency`. */
 	concurrency: number;
+	/** Save a program as always allowed outside the sandbox in a repository. */
+	allowProgram: (repositoryId: string, program: string) => Promise<void>;
 }
 
 /** A queued task for one repository, with nothing done yet. */
@@ -62,7 +65,8 @@ export function newTask(input: {
 		checks: null,
 		followUps: [],
 		review: null,
-		exploration: null
+		exploration: null,
+		approval: null
 	};
 }
 
@@ -70,8 +74,16 @@ export function newTask(input: {
 export const addUsage = (a: number | null, b: number | null) =>
 	a === null && b === null ? null : (a ?? 0) + (b ?? 0);
 
-/** What every part of the run service shares: the store, task updates and repository access. */
+/**
+ * What every part of the run service shares: the store, task updates, repository access, and
+ * the agents' requests to run commands outside the sandbox.
+ */
 export function createRunContext(deps: RunServiceDeps) {
+	const base = createRunContextBase(deps);
+	return { ...base, approvals: createApprovals(base) };
+}
+
+export function createRunContextBase(deps: RunServiceDeps) {
 	const { store, logs, events } = deps;
 
 	async function findTask(taskId: string): Promise<Task> {

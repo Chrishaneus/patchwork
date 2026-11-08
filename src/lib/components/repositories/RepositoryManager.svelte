@@ -77,6 +77,7 @@
 				onCheck={() => repositories.check(repo.id)}
 				onRemove={() => remove(repo.id)}
 				onSetCheckCommand={(command) => repositories.setCheckCommand(repo.id, command)}
+				onDisallowProgram={(program) => repositories.disallowProgram(repo.id, program)}
 				onClone={() => repositories.clone(repo.id)}
 			/>
 		{/each}

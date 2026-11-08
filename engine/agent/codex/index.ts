@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk';
 import { EngineError, type LogEntry } from '#lib/engine/contract.js';
 import { withoutSecrets } from '../../core/env.js';
-import { guidance, SANDBOX_GUIDANCE, short, type AgentRunner } from '../runner.js';
+import { guidance, sandboxGuidance, short, type AgentRunner } from '../runner.js';
 import { sandboxPolicy, type SandboxPolicy, type SandboxSupport } from '../sandbox.js';
 
 const PROFILE = 'patchwork';
@@ -208,7 +208,7 @@ export function createCodexAgentRunner(
 			// Without a key, Codex uses its own login (`codex login`).
 			apiKey: input.apiKey ?? undefined,
 			env,
-			config: { developer_instructions: [guidance(input), SANDBOX_GUIDANCE].join('\n') },
+			config: { developer_instructions: [guidance(input), sandboxGuidance(false)].join('\n') },
 			configOverrides: codexSandbox(policy)
 		});
 		const thread = codex.startThread({

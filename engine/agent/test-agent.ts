@@ -4,11 +4,12 @@ import type { AgentRunner } from './runner.js';
 
 /**
  * A scripted agent for end-to-end tests (selected with PATCHWORK_TEST_AGENT). It never calls a model.
- * - "edit": logs a few steps, writes a file and finishes.
+ * - "edit": logs a few steps, writes a file and finishes. When the instruction mentions "outside
+ *   the sandbox", it first asks to run `docker compose up -d` there.
  * - "hang": waits until it is cancelled.
  */
 export function createTestAgent(mode: string): AgentRunner {
-	return async ({ cwd, instruction, signal, log, mode: workflow, attributes }) => {
+	return async ({ cwd, instruction, signal, log, mode: workflow, attributes, requestApproval }) => {
 		const wait = (ms: number) =>
 			new Promise<void>((resolve, reject) => {
 				if (signal.aborted) return reject(new Error('aborted'));
@@ -80,9 +81,20 @@ export function createTestAgent(mode: string): AgentRunner {
 			log({ kind: 'result', text: summary });
 			return { summary, costUsd: 0.015, turns: 4 };
 		}
+		// An instruction mentioning the sandbox makes it ask to run a command outside it.
+		let outside = '';
+		if (/outside the sandbox/i.test(instruction) && requestApproval) {
+			const command = 'docker compose up -d';
+			const allowed = await requestApproval({
+				command,
+				reason: 'The tests need the database container.'
+			});
+			if (allowed) log({ kind: 'tool', text: `$ ${command}` });
+			outside = allowed ? ' Started the database.' : ' Couldn’t start the database.';
+		}
 		log({ kind: 'tool', text: 'Write CHANGELOG.md' });
 		await writeFile(path.join(cwd, 'CHANGELOG.md'), `# Changelog\n\n- ${instruction}\n`);
-		const summary = `Added a changelog entry for "${instruction}".`;
+		const summary = `Added a changelog entry for "${instruction}".${outside}`;
 		log({ kind: 'result', text: summary });
 		return { summary, costUsd: 0.0123, turns: 2 };
 	};

@@ -17,6 +17,7 @@ import {
 } from '#lib/engine/contract.js';
 import { git, parseRemoteUrl, tryGit } from '../git/git.js';
 import { browseFolders, resolveAllowed } from './folders.js';
+import { programOf } from '../agent/approvals.js';
 import type { JsonStore } from '../core/store.js';
 
 async function isDirectory(dir: string): Promise<boolean> {
@@ -318,6 +319,36 @@ export function createRepositoryService(store: JsonStore, options: RepositorySer
 		return repo;
 	}
 
+	async function update(
+		id: string,
+		change: { checkCommand?: string | null; allowedPrograms?: string[] }
+	): Promise<RepositoryWithStatus> {
+		await find(id);
+		const next: Partial<Repository> = {};
+		if (change.checkCommand !== undefined) {
+			const command = change.checkCommand?.trim() || null;
+			if (command && command.length > 2000) {
+				throw new EngineError('invalid_input', 'The check command is too long.');
+			}
+			next.checkCommand = command;
+		}
+		if (change.allowedPrograms !== undefined) {
+			const programs = change.allowedPrograms;
+			if (!Array.isArray(programs) || programs.some((p) => programOf(p) !== p)) {
+				throw new EngineError('invalid_input', 'Allowed programs are program names only.');
+			}
+			next.allowedPrograms = [...new Set(programs)].sort();
+		}
+		const repo = await store.update((data) => {
+			const index = data.repositories.findIndex((r) => r.id === id);
+			data.repositories[index] = { ...data.repositories[index], ...next };
+			return data.repositories[index];
+		});
+		const updated = await withStatus(repo);
+		options.onUpdate?.(updated);
+		return updated;
+	}
+
 	return {
 		async list(): Promise<RepositoryWithStatus[]> {
 			const { repositories } = await store.read();
@@ -431,18 +462,12 @@ export function createRepositoryService(store: JsonStore, options: RepositorySer
 			};
 		},
 
-		async update(id: string, checkCommand: string | null): Promise<RepositoryWithStatus> {
-			await find(id);
-			const command = checkCommand?.trim() || null;
-			if (command && command.length > 2000) {
-				throw new EngineError('invalid_input', 'The check command is too long.');
-			}
-			const repo = await store.update((data) => {
-				const index = data.repositories.findIndex((r) => r.id === id);
-				data.repositories[index] = { ...data.repositories[index], checkCommand: command };
-				return data.repositories[index];
-			});
-			return withStatus(repo);
+		update,
+
+		/** Always allow a program outside the sandbox in this repository. */
+		async allowProgram(id: string, program: string): Promise<void> {
+			const repo = await find(id);
+			await update(id, { allowedPrograms: [...(repo.allowedPrograms ?? []), program] });
 		},
 
 		/** Forget a repository. Never touches the folder itself. */

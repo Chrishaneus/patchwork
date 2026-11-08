@@ -110,7 +110,8 @@ export async function executeCodeTask(
 		model: input.model,
 		apiKey,
 		signal,
-		log: (entry) => ctx.log(taskId, entry)
+		log: (entry) => ctx.log(taskId, entry),
+		requestApproval: (ask) => ctx.approvals.request(taskId, ask, signal)
 	});
 	if (signal.aborted) throw signal.reason;
 	const before = await ctx.findTask(taskId);

@@ -195,3 +195,34 @@ test('lists recent conversations when the Agent is opened directly', async ({ pa
 	await page.goto('/agent');
 	await expect(page.getByRole('navigation', { name: 'Recent' })).toContainText(`Recent ${name}`);
 });
+
+test('asks before running a command outside the sandbox, and can remember the answer', async ({
+	page
+}) => {
+	const name = `approval-${Date.now()}`;
+	await addRepos(page, [name]);
+	await page.goto('/agent');
+	await pick(page, name);
+	const start = page.getByRole('textbox', { name: 'Message' });
+	await start.fill('Start the database outside the sandbox');
+	await start.press('Enter');
+
+	const approval = page.getByTestId('approval');
+	await expect(approval).toContainText('docker compose up -d');
+	await expect(approval).toContainText('The tests need the database container.');
+	await approval.getByRole('button', { name: 'Always allow docker in this repository' }).click();
+	await expect(approval).toBeHidden();
+	await expect(page.getByTestId('agent-task')).toHaveAttribute(
+		'data-task-status',
+		'awaiting_review'
+	);
+	const thread = page.getByTestId('agent-thread');
+	await expect(thread.locator('[data-kind="assistant"]')).toContainText('Started the database.');
+
+	// The repository lists it, and it can be taken back.
+	await page.goto('/repositories');
+	const card = page.getByTestId('repository').filter({ hasText: name });
+	await expect(card.getByTestId('allowed-programs')).toContainText('docker');
+	await card.getByRole('button', { name: 'Stop allowing docker' }).click();
+	await expect(card.getByTestId('allowed-programs')).toBeHidden();
+});

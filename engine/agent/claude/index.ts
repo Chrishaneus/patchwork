@@ -3,7 +3,7 @@ import type { CanUseTool, SandboxSettings, SDKMessage } from '@anthropic-ai/clau
 import { EngineError, type LogEntry } from '#lib/engine/contract.js';
 import { withoutSecrets } from '../../core/env.js';
 import { decideToolUse } from '../policy.js';
-import { guidance, SANDBOX_GUIDANCE, short, type AgentRunner } from '../runner.js';
+import { guidance, sandboxGuidance, short, type AgentRunner } from '../runner.js';
 import {
 	sandboxPolicy,
 	sandboxSupport,
@@ -22,14 +22,15 @@ export function noSandboxNote(support: SandboxSupport) {
 
 /**
  * The policy as Claude Code's sandbox, which wraps each shell command (bubblewrap on Linux,
- * Seatbelt on macOS). Every command runs inside it; the agent can't ask to run one outside.
+ * Seatbelt on macOS). With `canAsk`, the agent may ask to run one command outside it
+ * (`dangerouslyDisableSandbox`), which `canUseTool` turns into a question for the user.
  */
-export function claudeSandbox(policy: SandboxPolicy, cwd: string): SandboxSettings {
+export function claudeSandbox(policy: SandboxPolicy, cwd: string, canAsk = false): SandboxSettings {
 	return {
 		enabled: true,
 		// Bash still goes through the tool policy as well.
 		autoAllowBashIfSandboxed: false,
-		allowUnsandboxedCommands: false,
+		allowUnsandboxedCommands: canAsk,
 		network: { allowedDomains: policy.allowedDomains, strictAllowlist: true },
 		// Claude Code already lets commands write in the working directory.
 		filesystem: { allowWrite: policy.writable.filter((dir) => dir !== cwd) },
@@ -131,6 +132,8 @@ export function createClaudeAgentRunner(
 		if (input.signal.aborted) abort();
 		else input.signal.addEventListener('abort', abort, { once: true });
 
+		const canAsk = support.available && !!input.requestApproval;
+
 		const canUseTool: CanUseTool = async (toolName, toolInput) => {
 			const decision = decideToolUse(
 				toolName,
@@ -138,9 +141,23 @@ export function createClaudeAgentRunner(
 				input.cwd,
 				!!input.mode && input.mode !== 'code'
 			);
-			if (decision.allow) return { behavior: 'allow', updatedInput: toolInput };
-			input.log({ kind: 'error', text: `Blocked ${toolName}: ${decision.reason}` });
-			return { behavior: 'deny', message: decision.reason };
+			if (!decision.allow) {
+				input.log({ kind: 'error', text: `Blocked ${toolName}: ${decision.reason}` });
+				return { behavior: 'deny', message: decision.reason };
+			}
+			if (canAsk && toolName === 'Bash' && toolInput.dangerouslyDisableSandbox === true) {
+				const allowed = await input.requestApproval?.({
+					command: String(toolInput.command ?? ''),
+					reason: typeof toolInput.description === 'string' ? toolInput.description : null
+				});
+				if (!allowed) {
+					return {
+						behavior: 'deny',
+						message: 'The user did not allow this command outside the sandbox.'
+					};
+				}
+			}
+			return { behavior: 'allow', updatedInput: toolInput };
 		};
 
 		const env = claudeEnv(input.apiKey);
@@ -158,7 +175,9 @@ export function createClaudeAgentRunner(
 					systemPrompt: {
 						type: 'preset',
 						preset: 'claude_code',
-						append: [guidance(input), ...(support.available ? [SANDBOX_GUIDANCE] : [])].join('\n')
+						append: [guidance(input), ...(support.available ? [sandboxGuidance(canAsk)] : [])].join(
+							'\n'
+						)
 					},
 					...(support.available
 						? {
@@ -168,7 +187,8 @@ export function createClaudeAgentRunner(
 										protectedFiles: opts.protectedFiles ?? [],
 										readOnly: !!input.mode && input.mode !== 'code'
 									}),
-									input.cwd
+									input.cwd,
+									canAsk
 								)
 							}
 						: {}),

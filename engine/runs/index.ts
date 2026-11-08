@@ -227,6 +227,8 @@ export function createRunService(deps: RunServiceDeps) {
 
 		publish: (input: PublishInput) => publishTask(ctx, input),
 
+		answerApproval: ctx.approvals.answer,
+
 		/** Queue more work on a task that has a working copy. */
 		async followUp(taskId: string, instruction: string): Promise<Task> {
 			const text = instruction?.trim();

@@ -463,5 +463,14 @@
 	"settings_sandbox_codex_setup": "Codex's sandbox needs a one-time setup on this version of Windows (Windows 11 24H2 and later don't). Windows will ask for administrator approval. Its commands will fail until then.",
 	"settings_sandbox_codex_setup_button": "Set up the sandbox",
 	"settings_sandbox_codex_setting_up": "Waiting for Windows…",
+	"approval_title": "The agent wants to run a command outside the sandbox",
+	"approval_reason": "Its reason: {reason}",
+	"approval_warning": "Outside the sandbox it runs with your files, credentials and network access. Judge the command itself: the reason comes from the agent, and code it read could have put it up to this.",
+	"approval_allow_once": "Allow once",
+	"approval_allow_always": "Always allow {program} in this repository",
+	"approval_deny": "Don't allow",
+	"approval_once_only": "This command runs a shell, an interpreter or several programs, so it can only be allowed once.",
+	"repo_allowed_programs": "Always allowed outside the sandbox:",
+	"repo_disallow_program": "Stop allowing {program}",
 	"agent_switch_hint": "Sending turns this conversation into a change: the agent keeps what was said, gets its own branch and can edit files. Nothing is published until you review it."
 }

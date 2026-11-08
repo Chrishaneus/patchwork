@@ -42,6 +42,11 @@ export interface Repository {
 	cloneStatus: CloneStatus | null;
 	/** Why the last clone failed. */
 	cloneError: string | null;
+	/**
+	 * Programs you always allow the agent to run outside the sandbox in this repository (such as
+	 * `docker`), from "Always allow" on an approval.
+	 */
+	allowedPrograms?: string[];
 }
 
 export type CloneStatus = 'pending' | 'cloning' | 'ready' | 'failed';
@@ -213,7 +218,26 @@ export interface Task {
 	review: ReviewResult | null;
 	/** Explore workflow: the approaches the agent found. */
 	exploration: Exploration | null;
+	/** The agent is waiting for you to allow (or deny) a command outside the sandbox. */
+	approval?: ApprovalRequest | null;
 }
+
+/** The agent asks to run one command outside the sandbox, with your credentials and network. */
+export interface ApprovalRequest {
+	id: string;
+	command: string;
+	/** Why, in the agent's words; it may be wrong or planted, so the command is what counts. */
+	reason: string | null;
+	/**
+	 * The program the command runs (`docker`), when "Always allow" can safely match on it: not for
+	 * shells, interpreters or commands chained with `&&`, pipes and the like.
+	 */
+	program: string | null;
+	at: string;
+}
+
+/** `always` also saves the program in the repository's `allowedPrograms`. */
+export type ApprovalAnswer = 'once' | 'always' | 'deny';
 
 /** Something a review rates from 1 to 5, e.g. "Security". */
 export interface ReviewAttribute {
@@ -462,10 +486,14 @@ export interface EngineApi {
 	addRepository(input: { path: string }): Promise<RepositoryWithStatus>;
 	checkRepository(input: { id: string }): Promise<RepositoryWithStatus>;
 	removeRepository(input: { id: string }): Promise<{ id: string }>;
-	/** Change a repository's settings; `checkCommand: null` (or empty) turns checks off. */
+	/**
+	 * Change a repository's settings; what's left out stays. `checkCommand: null` (or empty) turns
+	 * checks off.
+	 */
 	updateRepository(input: {
 		id: string;
-		checkCommand: string | null;
+		checkCommand?: string | null;
+		allowedPrograms?: string[];
 	}): Promise<RepositoryWithStatus>;
 	/** On a server: repositories found in the allowed folders, ready to add. */
 	listRepositoryCandidates(input: Record<string, never>): Promise<RepositoryCandidates>;
@@ -507,6 +535,12 @@ export interface EngineApi {
 	getRun(input: { id: string }): Promise<Run>;
 	getTaskLog(input: { taskId: string }): Promise<LogEntry[]>;
 	getTaskDiff(input: { taskId: string }): Promise<TaskDiff>;
+	/** Answer the agent's request (`task.approval`) to run a command outside the sandbox. */
+	answerApproval(input: {
+		taskId: string;
+		approvalId: string;
+		answer: ApprovalAnswer;
+	}): Promise<Task>;
 	/** Stop a queued or running task. Its worktree is kept so the partial work can be reviewed. */
 	cancelTask(input: { taskId: string }): Promise<Task>;
 	/** Delete a finished task's worktree and branch. */
@@ -601,6 +635,7 @@ export const engineMethods: readonly EngineMethod[] = [
 	'getRun',
 	'getTaskLog',
 	'getTaskDiff',
+	'answerApproval',
 	'cancelTask',
 	'discardTask',
 	'publishTask',

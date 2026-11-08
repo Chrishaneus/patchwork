@@ -120,7 +120,8 @@ export function createEngine(options: EngineOptions): Engine {
 		},
 		ensureCloned: (id) => repositories.clone(id),
 		addRepositoryFromUrl: (url) => repositories.addFromUrl(url),
-		concurrency: 2
+		concurrency: 2,
+		allowProgram: (id, program) => repositories.allowProgram(id, program)
 	});
 	// If recovery fails (e.g. an unreadable data file), the calls that wait on it report the error.
 	const ready = (async () => {
@@ -169,7 +170,7 @@ export function createEngine(options: EngineOptions): Engine {
 		addRepository: ({ path }) => repositories.add(path),
 		checkRepository: ({ id }) => repositories.check(id),
 		removeRepository: ({ id }) => repositories.remove(id),
-		updateRepository: ({ id, checkCommand }) => repositories.update(id, checkCommand),
+		updateRepository: ({ id, ...change }) => repositories.update(id, change),
 		listRepositoryCandidates: () => repositories.candidates(),
 		addRepositoryFromUrl: ({ url, clone }) => repositories.addFromUrl(url, clone),
 		cloneRepository: ({ id }) => repositories.clone(id),
@@ -193,6 +194,7 @@ export function createEngine(options: EngineOptions): Engine {
 		getRun: afterReady(({ id }) => runs.get(id)),
 		getTaskLog: ({ taskId }) => runs.log(taskId),
 		getTaskDiff: ({ taskId }) => runs.diff(taskId),
+		answerApproval: (input) => runs.answerApproval(input),
 		cancelTask: ({ taskId }) => runs.cancel(taskId),
 		discardTask: ({ taskId }) => runs.discard(taskId),
 		publishTask: (input) => runs.publish(input),

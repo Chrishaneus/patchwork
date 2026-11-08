@@ -121,6 +121,7 @@ export async function executeReadOnlyTask(
 		apiKey,
 		signal,
 		log: (entry) => ctx.log(taskId, entry),
+		requestApproval: (ask) => ctx.approvals.request(taskId, ask, signal),
 		mode: run.kind,
 		attributes: run.attributes
 	});

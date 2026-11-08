@@ -2,13 +2,18 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { claudeEnv, claudeSandbox, isClaudeSignInError } from './index';
 
 describe('claudeSandbox', () => {
+	const policy = {
+		writable: ['/wt', '/repo/.git/worktrees/task'],
+		allowedDomains: ['registry.npmjs.org'],
+		deniedFiles: ['/home/me/.ssh'],
+		deniedEnv: ['GITHUB_TOKEN']
+	};
+
+	it('lets the agent ask to run a command outside it only when someone can answer', () => {
+		expect(claudeSandbox(policy, '/wt', true).allowUnsandboxedCommands).toBe(true);
+	});
+
 	it('enforces the policy with no way around it', () => {
-		const policy = {
-			writable: ['/wt', '/repo/.git/worktrees/task'],
-			allowedDomains: ['registry.npmjs.org'],
-			deniedFiles: ['/home/me/.ssh'],
-			deniedEnv: ['GITHUB_TOKEN']
-		};
 		expect(claudeSandbox(policy, '/wt')).toEqual({
 			enabled: true,
 			autoAllowBashIfSandboxed: false,

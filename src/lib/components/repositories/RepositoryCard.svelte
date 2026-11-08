@@ -5,6 +5,7 @@
 	import GitBranch from '@lucide/svelte/icons/git-branch';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import X from '@lucide/svelte/icons/x';
 	import CheckCommandEditor from '#lib/components/repositories/CheckCommandEditor.svelte';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -19,6 +20,7 @@
 		onCheck,
 		onRemove,
 		onSetCheckCommand,
+		onDisallowProgram,
 		onClone
 	}: {
 		repo: RepositoryWithStatus;
@@ -26,6 +28,7 @@
 		onCheck: () => void;
 		onRemove: () => void;
 		onSetCheckCommand: (command: string | null) => Promise<EngineErrorCode | null>;
+		onDisallowProgram: (program: string) => Promise<EngineErrorCode | null>;
 		onClone: () => void;
 	} = $props();
 
@@ -133,5 +136,26 @@
 			<Badge variant="destructive"><CircleAlert />{m.repo_unavailable()}</Badge>
 		{/if}
 		<CheckCommandEditor repoId={repo.id} command={repo.checkCommand} onSave={onSetCheckCommand} />
+		{#if repo.allowedPrograms?.length}
+			<div class="flex w-full flex-wrap items-center gap-2" data-testid="allowed-programs">
+				<span class="text-xs text-muted-foreground">{m.repo_allowed_programs()}</span>
+				{#each repo.allowedPrograms as program (program)}
+					<Badge variant="outline" class="gap-1 pr-0.5 font-mono">
+						{program}
+						<Button
+							variant="ghost"
+							size="icon"
+							class="size-5"
+							disabled={busy}
+							onclick={() => onDisallowProgram(program)}
+							aria-label={m.repo_disallow_program({ program })}
+							title={m.repo_disallow_program({ program })}
+						>
+							<X class="size-3" />
+						</Button>
+					</Badge>
+				{/each}
+			</div>
+		{/if}
 	</Card.Content>
 </Card.Root>

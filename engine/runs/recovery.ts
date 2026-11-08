@@ -44,6 +44,7 @@ export async function recoverInterrupted(store: JsonStore, events: EngineEvents)
 					...task,
 					status: 'failed',
 					finishedAt: new Date().toISOString(),
+					approval: null,
 					error: { code: 'interrupted', message: 'The app closed while this task was running.' }
 				};
 				interrupted.push(updated);

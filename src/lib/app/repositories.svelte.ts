@@ -85,6 +85,19 @@ export class RepositoriesState {
 		}
 	}
 
+	/** Stop always allowing a program outside the sandbox. Resolves to an error code, or null. */
+	async disallowProgram(id: string, program: string): Promise<EngineErrorCode | null> {
+		const repo = this.items.find((r) => r.id === id);
+		const allowedPrograms = (repo?.allowedPrograms ?? []).filter((p) => p !== program);
+		try {
+			const updated = await this.client.updateRepository({ id, allowedPrograms });
+			this.items = this.items.map((r) => (r.id === id ? updated : r));
+			return null;
+		} catch (error) {
+			return toCode(error);
+		}
+	}
+
 	/** Clone a repository from a URL and add it. Resolves to an error code, or null. */
 	async addFromUrl(url: string): Promise<EngineErrorCode | null> {
 		try {
