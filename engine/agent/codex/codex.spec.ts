@@ -1,11 +1,14 @@
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { Repository } from '#lib/engine/contract.js';
 import { tempDirs } from '../../test-helpers';
+import type { AgentRunInput } from '../runner';
 import {
 	codexSandbox,
 	codexSandboxSupport,
-	describeCodexEvent,
+	createCodexAgentRunner,
+	describeCodexItem,
 	findCodexBinary,
 	isCodexSignInError
 } from './index';
@@ -113,45 +116,37 @@ describe('codexSandbox', () => {
 	});
 });
 
-describe('describeCodexEvent', () => {
+describe('describeCodexItem', () => {
 	const cwd = '/wt';
 
 	it('logs commands when they start, without the shell wrapper', () => {
 		const command = {
 			id: '1',
-			type: 'command_execution' as const,
+			type: 'commandExecution' as const,
 			command: "/bin/bash -lc 'npm test'",
-			aggregated_output: '',
-			status: 'in_progress' as const
+			status: 'inProgress'
 		};
-		expect(describeCodexEvent({ type: 'item.started', item: command }, cwd)).toEqual([
+		expect(describeCodexItem('started', command, cwd)).toEqual([
 			{ kind: 'tool', text: '$ npm test' }
 		]);
-		expect(
-			describeCodexEvent({ type: 'item.completed', item: { ...command, status: 'completed' } }, cwd)
-		).toEqual([]);
+		expect(describeCodexItem('completed', { ...command, status: 'completed' }, cwd)).toEqual([]);
 	});
 
-	it('logs messages, file changes and errors', () => {
+	it('logs messages and file changes', () => {
 		expect(
-			describeCodexEvent(
-				{ type: 'item.completed', item: { id: '2', type: 'agent_message', text: ' Done. ' } },
-				cwd
-			)
+			describeCodexItem('completed', { id: '2', type: 'agentMessage', text: ' Done. ' }, cwd)
 		).toEqual([{ kind: 'assistant', text: 'Done.' }]);
 		expect(
-			describeCodexEvent(
+			describeCodexItem(
+				'completed',
 				{
-					type: 'item.completed',
-					item: {
-						id: '3',
-						type: 'file_change',
-						status: 'completed',
-						changes: [
-							{ path: '/wt/src/a.ts', kind: 'update' },
-							{ path: 'src/b.ts', kind: 'add' }
-						]
-					}
+					id: '3',
+					type: 'fileChange',
+					status: 'completed',
+					changes: [
+						{ path: '/wt/src/a.ts', kind: { type: 'update' } },
+						{ path: 'src/b.ts', kind: { type: 'add' } }
+					]
 				},
 				cwd
 			)
@@ -159,13 +154,114 @@ describe('describeCodexEvent', () => {
 			{ kind: 'tool', text: 'Edit src/a.ts' },
 			{ kind: 'tool', text: 'Write src/b.ts' }
 		]);
-		expect(
-			describeCodexEvent(
-				{ type: 'item.completed', item: { id: '4', type: 'error', message: 'Patch failed' } },
-				cwd
-			)
-		).toEqual([{ kind: 'error', text: 'Patch failed' }]);
 	});
+});
+
+describe('createCodexAgentRunner', () => {
+	/**
+	 * A stand-in for `codex app-server`: it records how it was started, asks to run one command
+	 * outside the sandbox, and answers with the decision it got.
+	 */
+	function fakeAppServer() {
+		const dir = dirs.make('patchwork-codex-');
+		const file = path.join(dir, 'codex');
+		writeFileSync(
+			file,
+			`#!/usr/bin/env node
+const fs = require('node:fs');
+const send = (m) => process.stdout.write(JSON.stringify(m) + '\\n');
+fs.writeFileSync(${JSON.stringify(path.join(dir, 'started.json'))}, JSON.stringify({ args: process.argv.slice(2), key: process.env.PATCHWORK_OPENAI_API_KEY ?? null }));
+require('node:readline').createInterface({ input: process.stdin }).on('line', (line) => {
+	const m = JSON.parse(line);
+	if (m.method === 'initialize') send({ id: m.id, result: {} });
+	if (m.method === 'thread/start') {
+		fs.writeFileSync(${JSON.stringify(path.join(dir, 'thread.json'))}, JSON.stringify(m.params));
+		send({ id: m.id, result: { thread: { id: 't1' } } });
+	}
+	if (m.method === 'turn/start') {
+		send({ id: m.id, result: { turn: { id: 'u1' } } });
+		send({ method: 'item/started', params: { item: { type: 'commandExecution', id: 'c1', command: "/bin/bash -lc 'docker compose up -d'", status: 'inProgress' } } });
+		send({ id: 0, method: 'item/commandExecution/requestApproval', params: { kind: 'command', command: "/bin/bash -lc 'docker compose up -d'", reason: 'The tests need the database.' } });
+	}
+	if (m.id === 0 && m.result) {
+		send({ method: 'item/completed', params: { item: { type: 'agentMessage', id: 'm1', text: 'Decision: ' + m.result.decision } } });
+		send({ method: 'turn/completed', params: { turn: { id: 'u1', status: 'completed', error: null } } });
+	}
+});
+`
+		);
+		chmodSync(file, 0o755);
+		const read = (name: string) => JSON.parse(readFileSync(path.join(dir, name), 'utf8'));
+		return { file, read };
+	}
+
+	const repository = {
+		id: 'r1',
+		name: 'repo',
+		path: '/repo',
+		slug: null,
+		provider: null,
+		defaultBranch: 'main',
+		checkCommand: null,
+		createdAt: ''
+	} as unknown as Repository;
+	const input = (overrides: Partial<AgentRunInput>): AgentRunInput => ({
+		cwd: dirs.make('patchwork-wt-'),
+		instruction: 'Start the database',
+		repository,
+		branch: 'patchwork/x',
+		baseBranch: 'main',
+		model: 'gpt-6-luna',
+		apiKey: null,
+		signal: new AbortController().signal,
+		log: () => {},
+		...overrides
+	});
+
+	it.skipIf(process.platform === 'win32')(
+		'asks the user before Codex runs a command outside the sandbox',
+		async () => {
+			const codex = fakeAppServer();
+			const asked: { command: string; reason: string | null }[] = [];
+			const log: string[] = [];
+			const result = await createCodexAgentRunner({ executable: codex.file })(
+				input({
+					requestApproval: async (request) => {
+						asked.push(request);
+						return true;
+					},
+					log: (entry) => log.push(entry.text)
+				})
+			);
+			expect(asked).toEqual([
+				{ command: 'docker compose up -d', reason: 'The tests need the database.' }
+			]);
+			expect(result.summary).toBe('Decision: accept');
+			expect(log).toContain('$ docker compose up -d');
+			expect(codex.read('thread.json')).toMatchObject({
+				approvalPolicy: 'on-request',
+				ephemeral: true
+			});
+			expect(codex.read('thread.json').developerInstructions).toContain('outside the sandbox');
+			expect(codex.read('started.json')).toMatchObject({ key: null });
+		}
+	);
+
+	it.skipIf(process.platform === 'win32')(
+		'declines when nobody can answer, and signs in with a saved key nobody else sees',
+		async () => {
+			const codex = fakeAppServer();
+			const result = await createCodexAgentRunner({ executable: codex.file })(
+				input({ apiKey: 'sk-saved' })
+			);
+			expect(result.summary).toBe('Decision: decline');
+			expect(codex.read('thread.json')).toMatchObject({ approvalPolicy: 'never' });
+			const started = codex.read('started.json');
+			expect(started.key).toBe('sk-saved');
+			expect(started.args.join(' ')).toContain('model_provider="patchwork-openai"');
+			expect(started.args.join(' ')).toMatch(/filters=\{[^}]*"PATCHWORK_OPENAI_API_KEY"="exclude"/);
+		}
+	);
 });
 
 describe('isCodexSignInError', () => {

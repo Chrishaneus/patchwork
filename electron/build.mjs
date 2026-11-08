@@ -8,8 +8,8 @@ const common = {
 	target: 'node22',
 	format: 'cjs',
 	sourcemap: true,
-	// The agent SDKs start native binaries from their own package folders, so they can't be bundled.
-	external: ['electron', '@anthropic-ai/claude-agent-sdk', '@openai/codex-sdk'],
+	// The Claude SDK starts its native binary from its own package folder, so it can't be bundled.
+	external: ['electron', '@anthropic-ai/claude-agent-sdk'],
 	logLevel: 'info'
 };
 

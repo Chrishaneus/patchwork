@@ -310,8 +310,21 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
     runner enforces them its own way. `claudeSandbox` (in `claude/`) turns them into the SDK's
     `sandbox` option, `codexSandbox` into Codex's (below). A future agent without a usable
     sandbox could run whole inside `@anthropic-ai/sandbox-runtime` (`srt`) with the same policy.
-- **Codex** ([`agent/codex/`](engine/agent/codex/index.ts)): OpenAI models run in Codex through
-  `@openai/codex-sdk`, which starts the bundled `codex` binary. `createAgentRunner`
+- **Running a command outside the sandbox:** when a task can't do something inside the sandbox
+  (say, start a database container), the agent may ask to run that one command outside it.
+  Runners get `requestApproval({ command, reason })` and turn their agent's own prompt into it;
+  the engine ([`runs/approvals.ts`](engine/runs/approvals.ts)) shows it as `task.approval`, waits
+  for `answerApproval` (a cancel or the time limit counts as no) and logs the answer. "Always"
+  saves the program on the repository (`allowedPrograms`); `programOf`
+  ([`agent/approvals.ts`](engine/agent/approvals.ts)) never offers it for shells, interpreters or
+  chained commands, which could run anything. Claude Code asks through
+  `allowUnsandboxedCommands` (a Bash call with `dangerouslyDisableSandbox` goes to `canUseTool`),
+  Codex through app-server's `item/commandExecution/requestApproval`.
+- **Codex** ([`agent/codex/`](engine/agent/codex/index.ts)): OpenAI models run in Codex's
+  app-server (`codex app-server`, JSON-RPC over stdio, [`app-server.ts`](engine/agent/codex/app-server.ts)),
+  one process per run, from the binary in `@openai/codex`. The earlier runner through
+  `@openai/codex-sdk` (`codex exec`, which can't ask for approvals) is kept for reference in
+  [`codex/sdk.ts`](engine/agent/codex/sdk.ts); nothing uses it. `createAgentRunner`
   ([`agent/agents.ts`](engine/agent/agents.ts)) picks the agent from the model's provider
   (`providerOf` in `src/lib/engine/models.ts`; custom IDs starting `gpt-`, `o<digit>` or `codex` go to
   Codex).
@@ -325,13 +338,19 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
     the overrides set `features.prefer_mxc` with `windows.sandbox="elevated"` as the fallback,
     and `allow_local_binding` for MXC's proxy. When the probe fails there, Settings offers
     `setUpAgentSandbox`, which runs `codex sandbox setup --elevated --current-user` (UAC).
-  - No per-tool hook (`approvalPolicy: 'never'`), so `policy.ts` doesn't run: the sandbox is the
-    whole boundary. Read-only workflows get no writable folders.
-  - Our guidance goes in `developer_instructions`; Codex reads the repository's `AGENTS.md`
+  - No per-tool hook, so `policy.ts` doesn't run: the sandbox is the whole boundary. Read-only
+    workflows get no writable folders. The approval policy is `on-request` when someone can
+    answer (Codex asks before running a command outside the sandbox), else `never`; every other
+    request that would widen the sandbox (file changes, permissions, network hosts) is declined.
+  - Our guidance goes in the thread's `developerInstructions`; threads are ephemeral, so runs
+    don't show up in the user's Codex history. Codex reads the repository's `AGENTS.md`
     itself. Commands are logged when they start, because a failed one may never be reported as
     completed. Codex reports tokens, not dollars, so cost and turns are left empty.
   - Credentials: a key saved in Settings, then `OPENAI_API_KEY`, then the machine's
-    `codex login` (`~/.codex/auth.json`, which the sandbox denies to both agents).
+    `codex login` (`~/.codex/auth.json`, which the sandbox denies to both agents). app-server
+    ignores key variables and logging in through it would replace the user's login, so a key
+    goes in `PATCHWORK_OPENAI_API_KEY` with a model provider that reads it (`env_key`); commands
+    never see it.
   - Verified with a real run (`gpt-6-luna`, ChatGPT login): it fixed a bug in a worktree, the
     app's `secrets.json` was unreadable, GitHub was refused by the proxy, and in an explore run
     the worktree was read-only.

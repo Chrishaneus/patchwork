@@ -2,11 +2,17 @@ import { execFile, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk';
 import { EngineError, type LogEntry } from '#lib/engine/contract.js';
 import { withoutSecrets } from '../../core/env.js';
-import { guidance, sandboxGuidance, short, type AgentRunner } from '../runner.js';
+import {
+	guidance,
+	sandboxGuidance,
+	short,
+	type AgentRunInput,
+	type AgentRunner
+} from '../runner.js';
 import { sandboxPolicy, type SandboxPolicy, type SandboxSupport } from '../sandbox.js';
+import { startAppServer, type CodexItem, type CodexTurn } from './app-server.js';
 
 const PROFILE = 'patchwork';
 
@@ -128,38 +134,33 @@ export function codexSandbox(
 }
 
 /** The command Codex ran, without the `bash -lc '…'` it wraps every command in. */
-function unwrap(command: string) {
+export function unwrap(command: string) {
 	const match = /^\S*\b(?:ba)?sh -lc (['"])([\s\S]*)\1$/.exec(command);
 	return match ? match[2] : command;
 }
 
-/** Turn one Codex event into log entries for the UI. */
-export function describeCodexEvent(event: ThreadEvent, cwd: string): Omit<LogEntry, 'at'>[] {
+/** Turn one Codex item, when it starts or completes, into log entries for the UI. */
+export function describeCodexItem(
+	stage: 'started' | 'completed',
+	item: CodexItem,
+	cwd: string
+): Omit<LogEntry, 'at'>[] {
 	// Commands are logged when they start: a failed one may never be reported as completed.
-	if (event.type === 'item.started' && event.item.type === 'command_execution') {
-		return [{ kind: 'tool', text: `$ ${short(unwrap(event.item.command))}` }];
-	}
-	if (event.type !== 'item.completed') return [];
-	const item: ThreadItem = event.item;
-	switch (item.type) {
-		case 'agent_message':
-			return item.text.trim() ? [{ kind: 'assistant', text: item.text.trim() }] : [];
-		case 'file_change':
-			return item.changes.map((change) => ({
-				kind: 'tool' as const,
-				text: `${change.kind === 'add' ? 'Write' : change.kind === 'delete' ? 'Delete' : 'Edit'} ${
-					path.relative(cwd, path.resolve(cwd, change.path)) || '.'
-				}`
-			}));
-		case 'web_search':
-			return [{ kind: 'tool', text: `WebSearch ${short(item.query)}` }];
-		case 'mcp_tool_call':
-			return [{ kind: 'tool', text: `${item.server}.${item.tool}` }];
-		case 'error':
-			return [{ kind: 'error', text: item.message }];
-		default:
-			return [];
-	}
+	if ('command' in item)
+		return stage === 'started' ? [{ kind: 'tool', text: `$ ${short(unwrap(item.command))}` }] : [];
+	if (stage !== 'completed') return [];
+	if ('text' in item)
+		return item.text.trim() ? [{ kind: 'assistant', text: item.text.trim() }] : [];
+	if ('changes' in item)
+		return item.changes.map((change) => ({
+			kind: 'tool' as const,
+			text: `${change.kind.type === 'add' ? 'Write' : change.kind.type === 'delete' ? 'Delete' : 'Edit'} ${
+				path.relative(cwd, path.resolve(cwd, change.path)) || '.'
+			}`
+		}));
+	if ('query' in item) return [{ kind: 'tool', text: `WebSearch ${short(item.query)}` }];
+	if ('server' in item) return [{ kind: 'tool', text: `${item.server}.${item.tool}` }];
+	return [];
 }
 
 /** Codex couldn't sign in to OpenAI (no API key and no `codex login`). */
@@ -169,7 +170,7 @@ export function isCodexSignInError(text: string) {
 	);
 }
 
-function codexError(text: string) {
+export function codexError(text: string) {
 	return isCodexSignInError(text)
 		? new EngineError(
 				'agent_not_signed_in',
@@ -178,10 +179,60 @@ function codexError(text: string) {
 		: new EngineError('agent_failed', text);
 }
 
+/** The variable a saved API key reaches Codex in; commands never see it. */
+const KEY_ENV = 'PATCHWORK_OPENAI_API_KEY';
+
 /**
- * The OpenAI agent: Codex (through its SDK) running in the worktree, in its own sandbox. Codex
- * has no per-tool approval hook, so the sandbox is the whole boundary: read-only workflows get
- * no writable folders, and nothing can reach GitHub or GitLab or read a credential.
+ * A model provider that signs in with the key in `KEY_ENV`: app-server ignores `OPENAI_API_KEY`,
+ * and logging in through it would replace the user's own `codex login`.
+ */
+const apiKeyProvider = [
+	`model_providers.patchwork-openai={name="OpenAI",base_url="https://api.openai.com/v1",env_key="${KEY_ENV}",wire_api="responses"}`,
+	'model_provider="patchwork-openai"'
+];
+
+/**
+ * Answers Codex's requests: a command it wants to run outside the sandbox goes to the user
+ * when someone can answer; anything else that would widen the sandbox is declined.
+ */
+async function answerCodex(
+	method: string,
+	params: Record<string, unknown>,
+	requestApproval: AgentRunInput['requestApproval']
+) {
+	switch (method) {
+		case 'item/commandExecution/requestApproval': {
+			const command = typeof params.command === 'string' ? params.command : '';
+			const plain = params.kind === 'command' && !params.networkApprovalContext && command;
+			const allowed =
+				plain && requestApproval
+					? await requestApproval({
+							command: unwrap(command),
+							reason: typeof params.reason === 'string' ? params.reason.trim() || null : null
+						})
+					: false;
+			return { decision: allowed ? 'accept' : 'decline' };
+		}
+		case 'item/fileChange/requestApproval':
+			return { decision: 'decline' };
+		case 'item/permissions/requestApproval':
+			return { permissions: {}, scope: 'turn' };
+		case 'execCommandApproval':
+		case 'applyPatchApproval':
+			return { decision: { denied: { rejection: 'Not allowed outside the sandbox.' } } };
+		case 'item/tool/requestUserInput':
+			return { answers: {} };
+		case 'mcpServer/elicitation/request':
+			return { action: 'decline', content: null, _meta: null };
+		default:
+			throw new Error(`Patchwork doesn’t answer ${method}.`);
+	}
+}
+
+/**
+ * The OpenAI agent: Codex's app-server running in the worktree, in Codex's own sandbox. Read-only
+ * workflows get no writable folders, and nothing can reach GitHub or GitLab or read a
+ * credential. When the user can answer, Codex may ask to run one command outside the sandbox.
  */
 export function createCodexAgentRunner(
 	opts: {
@@ -191,7 +242,8 @@ export function createCodexAgentRunner(
 	} = {}
 ): AgentRunner {
 	return async (input) => {
-		const { Codex } = await import('@openai/codex-sdk');
+		if (!opts.executable)
+			throw new EngineError('agent_failed', 'Codex isn’t installed with this app.');
 		const readOnly = !!input.mode && input.mode !== 'code';
 		const policy = sandboxPolicy({
 			cwd: input.cwd,
@@ -203,43 +255,95 @@ export function createCodexAgentRunner(
 				(entry): entry is [string, string] => entry[1] !== undefined
 			)
 		);
-		const codex = new Codex({
-			codexPathOverride: opts.executable,
-			// Without a key, Codex uses its own login (`codex login`).
-			apiKey: input.apiKey ?? undefined,
+		// Without a key, Codex uses its own login (`codex login`).
+		if (input.apiKey) env[KEY_ENV] = input.apiKey;
+		const overrides = [
+			...codexSandbox({ ...policy, deniedEnv: [...policy.deniedEnv, KEY_ENV] }),
+			...(input.apiKey ? apiKeyProvider : [])
+		];
+		const canAsk = !!input.requestApproval;
+
+		let summary = '';
+		let lastError = '';
+		let finish!: { resolve: (summary: string) => void; reject: (error: Error) => void };
+		const finished = new Promise<string>((resolve, reject) => (finish = { resolve, reject }));
+		finished.catch(() => {});
+		const server = startAppServer({
+			executable: opts.executable,
+			args: overrides.flatMap((override) => ['-c', override]),
 			env,
-			config: { developer_instructions: [guidance(input), sandboxGuidance(false)].join('\n') },
-			configOverrides: codexSandbox(policy)
+			onNotification(method, params) {
+				if (method === 'item/started' || method === 'item/completed') {
+					const stage = method === 'item/started' ? 'started' : 'completed';
+					for (const entry of describeCodexItem(stage, params.item as CodexItem, input.cwd)) {
+						if (entry.kind === 'assistant') summary = entry.text;
+						input.log(entry);
+					}
+				} else if (method === 'error' && !params.willRetry) {
+					const error = params.error as CodexTurn['error'];
+					lastError = error?.additionalDetails || error?.message || lastError;
+				} else if (method === 'turn/completed') {
+					const turn = params.turn as CodexTurn;
+					if (turn.status === 'completed') finish.resolve(summary);
+					else
+						finish.reject(
+							codexError(
+								turn.error?.additionalDetails ||
+									turn.error?.message ||
+									lastError ||
+									`The turn ${turn.status}.`
+							)
+						);
+				}
+			},
+			onRequest: (method, params) => answerCodex(method, params, input.requestApproval),
+			onExit: (error) => finish.reject(codexError(error.message))
 		});
-		const thread = codex.startThread({
-			workingDirectory: input.cwd,
-			model: input.model,
-			approvalPolicy: 'never'
-		});
+		const abort = () => {
+			finish.reject(input.signal.reason);
+			server.close();
+		};
+		input.signal.addEventListener('abort', abort, { once: true });
 
 		try {
-			const { events } = await thread.runStreamed(input.instruction, { signal: input.signal });
+			if (input.signal.aborted) throw input.signal.reason;
+			await server.request('initialize', {
+				clientInfo: { name: 'patchwork', title: 'Patchwork', version: '1' },
+				capabilities: {
+					experimentalApi: false,
+					requestAttestation: false,
+					optOutNotificationMethods: [
+						'item/agentMessage/delta',
+						'item/commandExecution/outputDelta',
+						'item/reasoning/textDelta',
+						'item/reasoning/summaryTextDelta'
+					]
+				}
+			});
+			server.notify('initialized');
+			const { thread } = await server.request<{ thread: { id: string } }>('thread/start', {
+				cwd: input.cwd,
+				model: input.model,
+				approvalPolicy: canAsk ? 'on-request' : 'never',
+				developerInstructions: [guidance(input), sandboxGuidance(canAsk)].join('\n'),
+				ephemeral: true
+			});
+			await server.request('turn/start', {
+				threadId: thread.id,
+				input: [{ type: 'text', text: input.instruction, text_elements: [] }]
+			});
 			input.log({ kind: 'info', text: `Agent started with Codex (${input.model})` });
-			let summary = '';
-			for await (const event of events) {
-				for (const entry of describeCodexEvent(event, input.cwd)) {
-					if (entry.kind === 'assistant') summary = entry.text;
-					input.log(entry);
-				}
-				if (event.type === 'turn.failed') throw codexError(event.error.message);
-				if (event.type === 'error') throw codexError(event.message);
-				if (event.type === 'turn.completed') {
-					if (!summary)
-						throw new EngineError('agent_failed', 'The agent stopped without a summary.');
-					return { summary, costUsd: null, turns: null };
-				}
-			}
-			throw new EngineError('agent_failed', 'The agent stopped without a result.');
+			const result = await finished;
+			if (!result) throw new EngineError('agent_failed', 'The agent stopped without a summary.');
+			return { summary: result, costUsd: null, turns: null };
 		} catch (error) {
 			if (input.signal.aborted) throw input.signal.reason;
 			if (!(error instanceof EngineError) && error instanceof Error)
 				throw codexError(error.message);
 			throw error;
+		} finally {
+			input.signal.removeEventListener('abort', abort);
+			server.close();
 		}
 	};
 }

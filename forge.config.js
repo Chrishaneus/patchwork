@@ -21,8 +21,7 @@ const keep = [
 	// The agent binary for the system being built for (claude.exe on Windows).
 	`/node_modules/@anthropic-ai/claude-agent-sdk-${platform}-${arch}`,
 	'/node_modules/zod',
-	// Codex, for OpenAI models: the SDK, the CLI package it resolves, and the native binary.
-	'/node_modules/@openai/codex-sdk',
+	// Codex, for OpenAI models: the CLI package and the native binary its app-server runs from.
 	'/node_modules/@openai/codex',
 	`/node_modules/@openai/codex-${platform}-${arch}`
 ];
