@@ -55,6 +55,39 @@ describe('buildThread', () => {
 		expect(thread.every((i) => i.repos.join() === 'web')).toBe(true);
 	});
 
+	it('shows what the agent says while still working as notes, and only the last as its reply', () => {
+		const working = (status: Task['status']) =>
+			({
+				id: 'r4',
+				instruction: 'Run the tests',
+				createdAt: t(0),
+				tasks: [{ ...task('a', 'api', [{ instruction: 'Again', at: t(30) }]), status }]
+			}) as Run;
+		const log = {
+			a: [
+				entry(1, 'assistant', 'Installing first.'),
+				entry(2, 'tool', '$ npm ci'),
+				entry(10, 'assistant', 'Still installing…'),
+				entry(20, 'assistant', 'All tests pass.'),
+				entry(31, 'tool', '$ npm test'),
+				entry(40, 'assistant', 'Still green.')
+			]
+		};
+		const kinds = (status: Task['status']) =>
+			buildThread(working(status), log)
+				.filter((i) => i.kind !== 'user')
+				.map((i) => [i.kind, i.text]);
+		expect(kinds('awaiting_review')).toEqual([
+			['note', 'Installing first.'],
+			['tool', '$ npm ci'],
+			['note', 'Still installing…'],
+			['assistant', 'All tests pass.'],
+			['tool', '$ npm test'],
+			['assistant', 'Still green.']
+		]);
+		expect(kinds('running').at(-1)).toEqual(['note', 'Still green.']);
+	});
+
 	it('shows a review as a report card instead of its JSON', () => {
 		const review = { scores: [], summary: 'ok', verdict: 'comment', postedUrl: null } as const;
 		const reviewRun = {
@@ -73,7 +106,7 @@ describe('buildThread', () => {
 		});
 		expect(thread.map((i) => [i.kind, i.text])).toEqual([
 			['user', 'https://github.com/acme/api/pull/3'],
-			['assistant', 'Looked at the diff.'],
+			['note', 'Looked at the diff.'],
 			['assistant', 'All good.'],
 			['report', '']
 		]);

@@ -53,14 +53,16 @@ test('talks to the agent about a change in one repository', async ({ page }) => 
 	await expect(page).toHaveURL(/\/agent\/[0-9a-f-]+$/);
 	const thread = page.getByTestId('agent-thread');
 	await expect(thread.locator('[data-kind="user"]').first()).toContainText('Add a changelog');
-	// The scripted agent answers, then the change is ready for review.
-	await expect(thread.locator('[data-kind="assistant"]').first()).toContainText(
+	// The scripted agent notes what it's doing, then replies once the change is ready for review.
+	await expect(thread.locator('[data-kind="note"]').first()).toContainText(
 		'Working on: Add a changelog'
 	);
 	await expect(page.getByTestId('agent-task')).toHaveAttribute(
 		'data-task-status',
 		'awaiting_review'
 	);
+	await expect(thread.locator('[data-kind="assistant"]')).toHaveCount(1);
+	await expect(thread.locator('[data-kind="assistant"]')).toContainText('Added a changelog entry');
 	await expect(thread).toContainText('Write CHANGELOG.md');
 
 	const reply = page.getByRole('textbox', { name: 'Reply to the agent…' });
@@ -121,7 +123,7 @@ test('sends a reply to all repositories, and shows each one on its own', async (
 
 	await page.getByRole('tab', { name: names[1] }).click();
 	await expect(thread).toContainText('Keep it short');
-	await expect(thread.locator('[data-kind="assistant"]').first()).toContainText('Working on');
+	await expect(thread.locator('[data-kind="note"]').first()).toContainText('Working on');
 });
 
 test('long URLs, paths and names never make the page scroll sideways', async ({ page }) => {

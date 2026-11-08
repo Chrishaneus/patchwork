@@ -1,6 +1,7 @@
-import type { LogEntry, Run } from '#lib/engine/contract.js';
+import type { LogEntry, Run, Task, TaskStatus } from '#lib/engine/contract.js';
 
-export type ThreadKind = 'user' | 'assistant' | 'tool' | 'info' | 'error' | 'report';
+/** `note`: something the agent said while still working, shown smaller than its reply. */
+export type ThreadKind = 'user' | 'assistant' | 'note' | 'tool' | 'info' | 'error' | 'report';
 
 export interface ThreadItem {
 	key: string;
@@ -18,6 +19,29 @@ const stripJson = (text: string) => text.replace(/```json\s*[\s\S]*?```/gi, '').
 
 /** Follow-ups sent to several repositories at once are one message; their times differ slightly. */
 const SAME_MESSAGE_MS = 10_000;
+
+const ACTIVE: TaskStatus[] = ['queued', 'preparing', 'running'];
+
+/**
+ * Only a turn's last message is the agent's reply. Messages it wrote while still working ("the
+ * install is still running…") become notes; agents don't mark them, so it shows only in what
+ * follows: more work before your next message, or a task that's still running.
+ */
+function markProgressNotes(own: ThreadItem[], task: Task) {
+	const turnEnds = (task.followUps ?? []).map((f) => Date.parse(f.at));
+	const endOfTurn = (at: string) => turnEnds.find((end) => end > Date.parse(at)) ?? Infinity;
+	own.forEach((item, index) => {
+		if (item.kind !== 'assistant') return;
+		const end = endOfTurn(item.at);
+		const moreWork = own
+			.slice(index + 1)
+			.some(
+				(next) => (next.kind === 'assistant' || next.kind === 'tool') && Date.parse(next.at) < end
+			);
+		const stillWorking = end === Infinity && ACTIVE.includes(task.status);
+		if (moreWork || stillWorking) item.kind = 'note';
+	});
+}
 
 /**
  * Turn a run into a chat thread: your messages (the first instruction and follow-ups), and the
@@ -71,6 +95,7 @@ export function buildThread(
 				? Date.parse(run.switchedFrom.at)
 				: -Infinity;
 	for (const task of tasks) {
+		const own: ThreadItem[] = [];
 		(logs[task.id] ?? []).forEach((entry, index) => {
 			// The follow-up note repeats a message that's already shown as yours.
 			if (entry.kind === 'info' && entry.text.startsWith('Follow-up: ')) return;
@@ -78,7 +103,7 @@ export function buildThread(
 			const readOnly = Date.parse(entry.at) < readOnlyUntil;
 			const text = readOnly && kind === 'assistant' ? stripJson(entry.text) : entry.text;
 			if (!text) return;
-			items.push({
+			own.push({
 				key: `${task.id}:${index}`,
 				kind,
 				text,
@@ -86,6 +111,8 @@ export function buildThread(
 				repos: [task.repositoryName]
 			});
 		});
+		markProgressNotes(own, task);
+		items.push(...own);
 		// The latest report, where it was produced: when the task finished, or just before the
 		// question being answered now.
 		if (task.review || task.exploration) {

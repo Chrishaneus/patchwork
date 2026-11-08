@@ -2,6 +2,7 @@
 	import Markdown from '#lib/components/shared/Markdown.svelte';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import Wrench from '@lucide/svelte/icons/wrench';
 	import type { Snippet } from 'svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -89,6 +90,17 @@
 							<Badge variant="outline" class="max-w-[12rem] truncate">{item.repos[0]}</Badge>
 						{/if}
 						{time(item.at)}
+					</span>
+				</div>
+			{:else if item.kind === 'note'}
+				<div
+					class="flex min-w-0 items-start gap-2 pl-2 text-xs text-muted-foreground"
+					data-kind="note"
+				>
+					<MessageCircle class="mt-0.5 size-3 shrink-0" />
+					<span class="min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">
+						{#if showRepos}<span class="text-foreground/70">{item.repos[0]}:</span>{/if}
+						{item.text}
 					</span>
 				</div>
 			{:else if item.kind === 'tool'}
