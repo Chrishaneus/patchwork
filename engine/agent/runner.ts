@@ -7,6 +7,11 @@ export const SANDBOX_GUIDANCE = [
 	'fails because of that, say so in your summary rather than working around it.'
 ].join('\n');
 
+const LONG_COMMANDS = [
+	'Commands such as installs, builds and test runs can take several minutes and print nothing for',
+	'a long time. Wait for them to finish instead of stopping or restarting them.'
+].join('\n');
+
 export interface AgentRunInput {
 	/** The worktree the agent works in. */
 	cwd: string;
@@ -40,7 +45,8 @@ export function guidance(input: AgentRunInput) {
 		return [
 			`You are working in a read-only copy of the repository "${input.repository.slug ?? input.repository.name}".`,
 			'Read code and run commands (tests, searches) as needed, but do not modify, create or delete files,',
-			'and do not commit or push. Follow the requested output format exactly.'
+			'and do not commit or push. Follow the requested output format exactly.',
+			LONG_COMMANDS
 		].join('\n');
 	}
 	return [
@@ -50,7 +56,8 @@ export function guidance(input: AgentRunInput) {
 		'Run the project’s existing checks or tests when that is practical, and fix what your change breaks.',
 		'Do not commit, push, or open pull requests: the app does that after a person reviews your work.',
 		'End with a short Markdown summary of what you changed and why. It becomes the pull request description,',
-		'so do not add a signature or "generated with" footer to it.'
+		'so do not add a signature or "generated with" footer to it.',
+		LONG_COMMANDS
 	].join('\n');
 }
 
