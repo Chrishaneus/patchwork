@@ -11,10 +11,17 @@ function setup(classifyMode: ModeClassifier) {
 }
 
 describe('parseMode', () => {
-	it('reads the first mode name in a reply', () => {
+	it('accepts a reply that is exactly one mode name', () => {
 		expect(parseMode('explore')).toBe('explore');
-		expect(parseMode('Ask.')).toBe('ask');
-		expect(parseMode('The answer is: review')).toBe('review');
+		expect(parseMode(' Ask.\n')).toBe('ask');
+		expect(parseMode('**review**')).toBe('review');
+		expect(parseMode('`change`')).toBe('change');
+	});
+
+	it('refuses anything longer, rather than guessing', () => {
+		expect(parseMode("This isn't a change, it's an ask")).toBeNull();
+		expect(parseMode('The answer is: review')).toBeNull();
+		expect(parseMode('ask or explore')).toBeNull();
 		expect(parseMode('changes')).toBeNull();
 		expect(parseMode('')).toBeNull();
 	});

@@ -28,10 +28,17 @@ const INSTRUCTIONS = `You route messages in a coding tool. Read the user's messa
 When unsure between change and something else, answer change.
 Reply with exactly one word: review, ask, explore or change.`;
 
-/** The first mode name in the model's reply. */
+/**
+ * The mode, if the reply is exactly one mode name. Case, quotes, bold and a final full stop are
+ * fine. A longer reply ("This isn't a change, it's an ask") is refused rather than guessed at, so
+ * the keyword rules decide instead.
+ */
 export function parseMode(reply: string): AgentMode | null {
-	const match = new RegExp(`\\b(${agentModes.join('|')})\\b`, 'i').exec(reply);
-	return match ? (match[1].toLowerCase() as AgentMode) : null;
+	const word = reply
+		.trim()
+		.replace(/^["'`*_]+|["'`*_.!]+$/g, '')
+		.toLowerCase();
+	return agentModes.includes(word as AgentMode) ? (word as AgentMode) : null;
 }
 
 /** A small, fast Claude model with every tool turned off, for one short answer. */
@@ -69,6 +76,7 @@ export function createClaudeModeClassifier(
 				if (mode) return mode;
 				break;
 			}
+			// The message classifier falls back to the keyword rules.
 			throw new EngineError('agent_failed', 'The model gave no mode.');
 		} finally {
 			signal.removeEventListener('abort', abort);

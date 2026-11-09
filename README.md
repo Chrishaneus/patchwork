@@ -102,7 +102,7 @@ Everything starts from **Agent** (under **Workflows** in the sidebar). By defaul
 **Auto**: it follows what you write, and the button shows what it picked (e.g. "Auto: Review").
 When you pause typing, a small, fast model (Claude Haiku, with no tools) reads the message and
 picks the mode; the button shows a spinner meanwhile. Until it answers, or when it can't (no
-Anthropic credentials), keyword rules decide:
+Anthropic credentials, or a reply that isn't just one mode name), keyword rules decide:
 
 - A pull request link, or "review/check … PR #12", means a review. A link always does, without
   asking the model.
