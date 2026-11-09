@@ -200,8 +200,14 @@ export function createRequestHandler(options: ServerOptions): RequestListener {
 
 			return sendJson(res, 404, { error: 'not_found' }, cors);
 		} catch (error) {
-			if (!res.headersSent) sendJson(res, 500, { error: 'internal', message: String(error) });
-			else res.end();
+			// The details (paths, stack) stay in the server's log; the caller only learns it failed.
+			console.error(`${req.method} ${req.url} failed:`, error);
+			if (!res.headersSent) {
+				sendJson(res, 500, {
+					error: 'internal',
+					message: 'Something went wrong on the server. Its log has the details.'
+				});
+			} else res.end();
 		}
 	};
 }

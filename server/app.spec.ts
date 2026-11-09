@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EngineEvent, Run } from '#lib/engine/contract.js';
 import { createEngine } from '../engine/index';
 import { createTestAgent } from '../engine/agent/test-agent';
@@ -110,6 +110,23 @@ describe('engine API', () => {
 			body: '{oops'
 		});
 		expect(broken.status).toBe(400);
+	});
+
+	it('logs unexpected errors and answers with a generic message', async () => {
+		const { base } = await start();
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		try {
+			// A malformed escape makes decoding the path throw.
+			const res = await fetch(`${base}/%E0%A4%A`);
+			expect(res.status).toBe(500);
+			const body = await res.json();
+			expect(body.error).toBe('internal');
+			expect(body.message).not.toMatch(/URI|malformed/i);
+			expect(consoleError).toHaveBeenCalledOnce();
+			expect(String(consoleError.mock.calls[0][1])).toMatch(/URIError/);
+		} finally {
+			consoleError.mockRestore();
+		}
 	});
 
 	it('streams task events while a run progresses', async () => {
