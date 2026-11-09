@@ -9,6 +9,8 @@ import { claudeEnv } from './claude/index.js';
 
 export interface ClassifyInput {
 	text: string;
+	/** The Claude model to ask. */
+	model: string;
 	/** Saved or environment API key; when null the agent's own login is used, if any. */
 	apiKey: string | null;
 	signal: AbortSignal;
@@ -41,11 +43,9 @@ export function parseMode(reply: string): AgentMode | null {
 	return agentModes.includes(word as AgentMode) ? (word as AgentMode) : null;
 }
 
-/** A small, fast Claude model with every tool turned off, for one short answer. */
-export function createClaudeModeClassifier(
-	opts: { executable?: string; model?: string } = {}
-): ModeClassifier {
-	return async ({ text, apiKey, signal }) => {
+/** A Claude model (Settings, by default a small, fast one) with no tools, for one short answer. */
+export function createClaudeModeClassifier(opts: { executable?: string } = {}): ModeClassifier {
+	return async ({ text, model, apiKey, signal }) => {
 		const { query } = await import('@anthropic-ai/claude-agent-sdk');
 		const abortController = new AbortController();
 		const abort = () => abortController.abort();
@@ -58,7 +58,7 @@ export function createClaudeModeClassifier(
 			const session = query({
 				prompt: `<message>\n${text}\n</message>`,
 				options: {
-					model: opts.model ?? 'claude-haiku-5-5',
+					model,
 					abortController,
 					systemPrompt: INSTRUCTIONS,
 					tools: [],
@@ -90,27 +90,31 @@ const CLASSIFY_TIMEOUT_MS = 15_000;
 
 /**
  * The engine's `classifyMessage`: the model decides, except for a pull request link (always a
- * review) or when it can't answer, where the keyword rules do.
+ * review), when Settings turned it off, or when it can't answer, where the keyword rules do.
  */
 export function createMessageClassifier(opts: {
 	classify: ModeClassifier;
+	/** The model from Settings, or null for the keyword rules only. */
+	getModel: () => Promise<string | null>;
 	getApiKey: () => Promise<string | null>;
 }) {
 	return async ({ text }: { text: string }) => {
 		if (typeof text !== 'string') throw new EngineError('invalid_input', 'Write a message.');
 		const message = text.trim().slice(0, MAX_CLASSIFY_CHARS);
-		if (!message || findPullRequestLink(message)) {
-			return { mode: detectAgentMode(message), source: 'rules' as const };
-		}
+		const rules = { mode: detectAgentMode(message), source: 'rules' as const };
+		if (!message || findPullRequestLink(message)) return rules;
+		const model = await opts.getModel();
+		if (!model) return rules;
 		try {
 			const mode = await opts.classify({
 				text: message,
+				model,
 				apiKey: await opts.getApiKey(),
 				signal: AbortSignal.timeout(CLASSIFY_TIMEOUT_MS)
 			});
 			return { mode, source: 'ai' as const };
 		} catch {
-			return { mode: detectAgentMode(message), source: 'rules' as const };
+			return rules;
 		}
 	};
 }

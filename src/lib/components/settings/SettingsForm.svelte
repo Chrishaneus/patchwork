@@ -11,6 +11,7 @@
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
+	import * as Select from '#lib/components/ui/select/index.js';
 	import type { EngineClient } from '#lib/engine/client.js';
 	import {
 		EngineError,
@@ -19,7 +20,7 @@
 		type Settings
 	} from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
-	import { providerOf } from '#lib/engine/models.js';
+	import { findModel, modelProviders, providerOf } from '#lib/engine/models.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let { client, events }: { client: EngineClient; events: EngineEventSource } = $props();
@@ -28,6 +29,9 @@
 	let model = $state('');
 	let timeoutMinutes = $state(30);
 	let concurrency = $state(2);
+	/** Auto mode's model, or RULES_ONLY (the Select needs a string). */
+	let autoMode = $state('');
+	const RULES_ONLY = 'rules';
 	let apiKey = $state('');
 	let saved = $state<'ai' | 'key' | null>(null);
 	let error = $state<EngineErrorCode | null>(null);
@@ -41,7 +45,22 @@
 		model = next.model;
 		timeoutMinutes = next.timeoutMinutes;
 		concurrency = next.concurrency;
+		autoMode = next.autoModeModel ?? RULES_ONLY;
 	}
+
+	/** Current Claude models, plus the saved one if it's older or custom. */
+	const autoModeModels = $derived.by(() => {
+		const current = modelProviders.find((p) => p.id === 'anthropic')?.models ?? [];
+		const saved = settings?.autoModeModel;
+		return saved && !current.some((model) => model.id === saved)
+			? [...current, { id: saved, name: findModel(saved)?.model.name ?? saved }]
+			: current;
+	});
+	const autoModeName = $derived(
+		autoMode === RULES_ONLY
+			? m.settings_auto_mode_rules()
+			: (autoModeModels.find((model) => model.id === autoMode)?.name ?? autoMode)
+	);
 
 	async function save(
 		section: 'ai' | 'key',
@@ -116,13 +135,30 @@
 							save('ai', {
 								model,
 								timeoutMinutes: Number(timeoutMinutes),
-								concurrency: Number(concurrency)
+								concurrency: Number(concurrency),
+								autoModeModel: autoMode === RULES_ONLY ? null : autoMode
 							});
 						}}
 					>
 						<div class="grid gap-2">
 							<Label for="model">{m.settings_model_label()}</Label>
 							<ModelPicker id="model" bind:value={model} />
+						</div>
+						<div class="grid gap-2">
+							<Label for="auto-mode">{m.settings_auto_mode_label()}</Label>
+							<Select.Root type="single" bind:value={autoMode}>
+								<Select.Trigger id="auto-mode" class="w-full" data-testid="auto-mode-model">
+									<span class="truncate">{autoModeName}</span>
+								</Select.Trigger>
+								<Select.Content>
+									{#each autoModeModels as model (model.id)}
+										<Select.Item value={model.id} label={model.name} />
+									{/each}
+									<Select.Separator />
+									<Select.Item value={RULES_ONLY} label={m.settings_auto_mode_rules()} />
+								</Select.Content>
+							</Select.Root>
+							<p class="text-xs text-muted-foreground">{m.settings_auto_mode_hint()}</p>
 						</div>
 						<div class="grid gap-4 sm:grid-cols-2">
 							<div class="grid gap-2">

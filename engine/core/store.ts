@@ -18,6 +18,8 @@ export interface StoredSettings {
 	githubClientId?: string | null;
 	/** What reviews rate by default; unset means the built-in defaults. */
 	reviewAttributes?: ReviewAttribute[];
+	/** Auto mode's model; unset means `defaultAutoModeModel`, null the keyword rules only. */
+	autoModeModel?: string | null;
 }
 
 export const defaultSettings: StoredSettings = {

@@ -145,6 +145,7 @@ export function createEngine(options: EngineOptions): Engine {
 	const classifyMessage = createMessageClassifier({
 		classify:
 			options.classifyMode ?? createClaudeModeClassifier({ executable: options.agentExecutable }),
+		getModel: settings.autoModeModel,
 		getApiKey: () => credentials.getApiKey('anthropic')
 	});
 

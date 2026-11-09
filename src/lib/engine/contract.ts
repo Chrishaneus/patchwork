@@ -384,6 +384,8 @@ export interface Settings {
 	githubAccount: GitHubAccount | null;
 	/** The default attributes reviews rate (editable). */
 	reviewAttributes: ReviewAttribute[];
+	/** The Claude model Auto mode asks which workflow a message wants; null = keyword rules only. */
+	autoModeModel: string | null;
 	/** Whether each agent's shell commands run in a sandbox here (Claude Code, Codex). */
 	agentSandbox: Record<AgentName, SandboxStatus>;
 }
@@ -418,6 +420,8 @@ export interface SettingsUpdate {
 	/** The GitHub App client ID to use for sign-in, or null to clear it. */
 	githubClientId?: string | null;
 	reviewAttributes?: ReviewAttribute[];
+	/** A Claude model for Auto mode, or null for the keyword rules only. */
+	autoModeModel?: string | null;
 }
 
 /** Pushed from the engine to the UI while tasks run. */

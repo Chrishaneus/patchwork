@@ -209,6 +209,7 @@ describe('settings', () => {
 			githubClientId: { value: null, source: null },
 			githubAccount: null,
 			reviewAttributes: expect.any(Array),
+			autoModeModel: 'claude-haiku-5-5',
 			agentSandbox: {
 				claude: {
 					available: expect.any(Boolean),

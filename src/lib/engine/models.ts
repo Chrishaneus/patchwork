@@ -64,6 +64,9 @@ export const modelProviders: ModelProvider[] = [
 	}
 ];
 
+/** The model Auto mode uses to pick a workflow, unless Settings says otherwise. */
+export const defaultAutoModeModel = 'claude-haiku-5-5';
+
 /** The catalogue entry for a model ID, with its provider; undefined for custom IDs. */
 export function findModel(id: string): { provider: ModelProvider; model: ModelOption } | undefined {
 	for (const provider of modelProviders) {

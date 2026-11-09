@@ -362,8 +362,9 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
   - Verified with a real run (`gpt-6-luna`, ChatGPT login): it fixed a bug in a worktree, the
     app's `secrets.json` was unreadable, GitHub was refused by the proxy, and in an explore run
     the worktree was read-only.
-  - The Auto-mode classifier stays a small Claude model; without Claude credentials it falls
-    back to the keyword rules.
+  - The Auto-mode classifier stays a Claude model (`autoModeModel` in Settings, Claude Haiku by
+    default, or null for the keyword rules only); without Claude credentials it falls back to the
+    keyword rules.
 - **Prompt:**
   - Your instruction, plus the repository and branch.
   - Asks the agent to follow the repository's conventions and run its checks, not to commit or

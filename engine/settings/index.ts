@@ -5,6 +5,7 @@ import {
 	type Settings,
 	type SettingsUpdate
 } from '#lib/engine/contract.js';
+import { defaultAutoModeModel, providerOf } from '#lib/engine/models.js';
 import { codexSandboxSupport, setUpCodexSandbox } from '../agent/codex/index.js';
 import { sandboxSupport, type SandboxSupport } from '../agent/sandbox.js';
 import type { Store } from '../core/store.js';
@@ -25,6 +26,12 @@ export function createSettingsService(opts: {
 	const { store, credentials } = opts;
 	let sandbox: { claude: SandboxSupport; codex: SandboxSupport } | undefined;
 
+	/** Auto mode's model, or null for the keyword rules only. */
+	async function autoModeModel(): Promise<string | null> {
+		const { settings } = await store.read();
+		return settings.autoModeModel === undefined ? defaultAutoModeModel : settings.autoModeModel;
+	}
+
 	async function get(): Promise<Settings> {
 		const { settings } = await store.read();
 		const sources = await credentials.sources();
@@ -44,6 +51,7 @@ export function createSettingsService(opts: {
 					: { value: null, source: null },
 			githubAccount: await opts.githubAccount(),
 			reviewAttributes: settings.reviewAttributes ?? defaultReviewAttributes,
+			autoModeModel: await autoModeModel(),
 			agentSandbox: (sandbox ??= {
 				claude: sandboxSupport(),
 				codex: codexSandboxSupport(opts.codexExecutable)
@@ -67,6 +75,16 @@ export function createSettingsService(opts: {
 				throw new EngineError('invalid_input', 'Tasks at the same time must be 1–8.');
 			}
 		}
+		const auto =
+			typeof update.autoModeModel === 'string' ? update.autoModeModel.trim() : update.autoModeModel;
+		// The classifier runs in Claude Code, so it needs a Claude model.
+		if (
+			auto !== undefined &&
+			auto !== null &&
+			(typeof auto !== 'string' || !auto || providerOf(auto) !== 'anthropic')
+		) {
+			throw new EngineError('invalid_input', 'Auto mode needs a Claude model.');
+		}
 		const reviewAttributes =
 			update.reviewAttributes !== undefined ? cleanAttributes(update.reviewAttributes) : undefined;
 		await store.update((data) => {
@@ -74,6 +92,7 @@ export function createSettingsService(opts: {
 			if (update.model !== undefined) data.settings.model = update.model.trim();
 			if (update.timeoutMinutes !== undefined) data.settings.timeoutMinutes = update.timeoutMinutes;
 			if (update.concurrency !== undefined) data.settings.concurrency = update.concurrency;
+			if (auto !== undefined) data.settings.autoModeModel = auto;
 		});
 		if (update.anthropicApiKey !== undefined) await credentials.saveApiKey(update.anthropicApiKey);
 		if (update.openaiApiKey !== undefined) await credentials.saveOpenAiKey(update.openaiApiKey);
@@ -102,5 +121,5 @@ export function createSettingsService(opts: {
 		return get();
 	}
 
-	return { get, update, setUpAgentSandbox };
+	return { get, update, setUpAgentSandbox, autoModeModel };
 }
