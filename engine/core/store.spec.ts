@@ -111,8 +111,10 @@ describe('Store recovery', () => {
 		first.close();
 		// The next start backs it up.
 		const second = new Store(dir);
-		await second.update((data) => data.runs.unshift(run('r2')));
+		await second.read();
+		// Changes made while the copy is still being written may end up in it too.
 		await second.backedUp;
+		await second.update((data) => data.runs.unshift(run('r2')));
 		expect(existsSync(path.join(dir, 'patchwork.db.bak'))).toBe(true);
 		second.close();
 
