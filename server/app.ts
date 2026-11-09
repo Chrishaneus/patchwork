@@ -18,6 +18,11 @@ export interface ServerOptions {
 	token?: string;
 	/** Extra host names allowed without a token, e.g. a reverse proxy's name. */
 	allowedHosts?: string[];
+	/**
+	 * With a token, the only other origins allowed to call the API (e.g. the mobile app's
+	 * `capacitor://localhost`). When empty, any origin may, since every call needs the token.
+	 */
+	allowedOrigins?: string[];
 	/** Interval for SSE keep-alive comments. */
 	heartbeatMs?: number;
 }
@@ -77,8 +82,14 @@ export function createRequestHandler(options: ServerOptions): RequestListener {
 	const allowedHosts = new Set([...LOCAL_HOSTS, ...(options.allowedHosts ?? [])]);
 	const heartbeatMs = options.heartbeatMs ?? 25_000;
 
+	const allowedOrigins = new Set((options.allowedOrigins ?? []).map((o) => o.toLowerCase()));
+
+	function originAllowed(origin: string) {
+		return allowedOrigins.size === 0 || allowedOrigins.has(origin.toLowerCase());
+	}
+
 	const corsHeaders = (req: IncomingMessage): Record<string, string> =>
-		token && req.headers.origin
+		token && req.headers.origin && originAllowed(req.headers.origin)
 			? {
 					'access-control-allow-origin': req.headers.origin,
 					'access-control-allow-headers': 'authorization, content-type',
@@ -158,7 +169,7 @@ export function createRequestHandler(options: ServerOptions): RequestListener {
 
 			const cors = corsHeaders(req);
 			if (req.method === 'OPTIONS') {
-				res.writeHead(token ? 204 : 403, cors);
+				res.writeHead(cors['access-control-allow-origin'] ? 204 : 403, cors);
 				return res.end();
 			}
 

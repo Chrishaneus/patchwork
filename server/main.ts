@@ -63,7 +63,12 @@ const server = createServer(
 		engine,
 		staticDir,
 		token: env.PATCHWORK_TOKEN || undefined,
-		allowedHosts: list(env.PATCHWORK_ALLOWED_HOSTS)
+		allowedHosts: list(env.PATCHWORK_ALLOWED_HOSTS),
+		// Origins contain colons (capacitor://localhost), so only commas separate them.
+		allowedOrigins: (env.PATCHWORK_ALLOWED_ORIGINS ?? '')
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean)
 	})
 );
 

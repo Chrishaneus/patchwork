@@ -112,6 +112,8 @@ Every host speaks the same small protocol, so adding a host is a transport, not 
 - **With a token:** every API call needs `Authorization: Bearer <token>`, and other hosts and
   origins (for example the mobile app) are allowed. The UI asks for the token and remembers it on
   that device.
+  `PATCHWORK_ALLOWED_ORIGINS` (comma separated, such as `capacitor://localhost,https://localhost`
+  for the mobile app) narrows the origins to that list.
 - **Cross-site requests:** engine calls must be `application/json`, so a browser on another
   website has to send a preflight request first, and the server refuses that without a token.
 - **Repository folders:** by default the server has no local folders at all: repositories are

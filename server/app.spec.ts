@@ -216,4 +216,26 @@ describe('access control', () => {
 		expect(preflight.status).toBe(204);
 		expect(preflight.headers.get('access-control-allow-origin')).toBe('capacitor://localhost');
 	});
+
+	it('with a token and a list of origins, allows only those', async () => {
+		const { base } = await start({
+			token: 'secret-token',
+			allowedOrigins: ['capacitor://localhost', 'https://localhost']
+		});
+		const preflight = (origin: string) =>
+			fetch(`${base}/api/engine/listRepositories`, { method: 'OPTIONS', headers: { origin } });
+
+		const allowed = await preflight('capacitor://localhost');
+		expect(allowed.status).toBe(204);
+		expect(allowed.headers.get('access-control-allow-origin')).toBe('capacitor://localhost');
+
+		const other = await preflight('https://evil.example.com');
+		expect(other.status).toBe(403);
+		expect(other.headers.get('access-control-allow-origin')).toBeNull();
+
+		// The token still works from anywhere that doesn't need CORS, such as curl.
+		const ok = await call(base, 'listRepositories', {}, { authorization: 'Bearer secret-token' });
+		expect(ok.status).toBe(200);
+		expect(ok.headers.get('access-control-allow-origin')).toBeNull();
+	});
 });

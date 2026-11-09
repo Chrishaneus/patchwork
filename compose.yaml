@@ -2,6 +2,7 @@
 #   WEB_PORT           host port (default 8080)
 #   WEB_BIND           host address to listen on (default 127.0.0.1, this machine only)
 #   PATCHWORK_TOKEN      access token; required before exposing the server to other machines
+#   PATCHWORK_ALLOWED_ORIGINS  with a token, the only other origins allowed (comma separated)
 #   PATCHWORK_GITHUB_CLIENT_ID  GitHub App client ID for "Sign in with GitHub" (or set it in Settings)
 #   ANTHROPIC_API_KEY  API key for the agent (or save one on the Settings page)
 #   OPENAI_API_KEY     the same for Codex, when an OpenAI model is picked
@@ -28,6 +29,7 @@ services:
     environment:
       PATCHWORK_TOKEN: ${PATCHWORK_TOKEN:-}
       PATCHWORK_ALLOWED_HOSTS: ${PATCHWORK_ALLOWED_HOSTS:-}
+      PATCHWORK_ALLOWED_ORIGINS: ${PATCHWORK_ALLOWED_ORIGINS:-}
       PATCHWORK_GITHUB_CLIENT_ID: ${PATCHWORK_GITHUB_CLIENT_ID:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

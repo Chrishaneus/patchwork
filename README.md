@@ -235,6 +235,7 @@ npm run clean            # remove build output and test leftovers
 | `PATCHWORK_DATA_DIR`                                                               | Engine data: store, logs, worktrees, clones, saved keys                              |
 | `PATCHWORK_TOKEN`                                                                  | Access token; required before opening the server to other machines                   |
 | `PATCHWORK_ALLOWED_HOSTS`                                                          | Extra host names allowed without a token (e.g. a reverse proxy)                      |
+| `PATCHWORK_ALLOWED_ORIGINS`                                                        | With a token, the only other origins allowed (`,` separated); default any            |
 | `PORT`, `HOST`                                                                     | Where the server listens (default `3000`, `0.0.0.0`; local mode `127.0.0.1`)         |
 | `ANTHROPIC_API_KEY`                                                                | Key for the agent, unless one is saved in Settings                                   |
 | `OPENAI_API_KEY`                                                                   | Key for Codex (OpenAI models), unless one is saved in Settings                       |
