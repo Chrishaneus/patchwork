@@ -225,6 +225,9 @@ npm run clean            # remove build output and test leftovers
   github.com or gitlab.com.
 - **Hidden Electron windows:** the Electron tests run the app hidden and offscreen
   (`PATCHWORK_HIDE_WINDOW=1`), so no windows appear on the desktop.
+- **Browser for component tests:** `test:unit` first installs Playwright's Chromium if it's missing
+  (about 150 MB, once). On a fresh Linux machine its system libraries may be missing too:
+  `npx playwright install-deps chromium` installs them (needs sudo).
 
 ## Settings for the server and Docker
 
