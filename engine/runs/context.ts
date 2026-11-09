@@ -121,7 +121,18 @@ export function createRunContextBase(deps: RunServiceDeps) {
 	function log(taskId: string, entry: Omit<LogEntry, 'at'>) {
 		const full: LogEntry = { at: new Date().toISOString(), ...entry };
 		events.emit({ type: 'task.log', taskId, entry: full });
-		logs.append(taskId, full).catch(() => undefined);
+		void logs.append(taskId, full, (error) => {
+			console.error(`Couldn't save the activity log of task ${taskId}:`, error);
+			events.emit({
+				type: 'task.log',
+				taskId,
+				entry: {
+					at: full.at,
+					kind: 'error',
+					text: `The activity log couldn't be saved (${error instanceof Error ? error.message : String(error)}). It is still shown here, but entries will be missing after a reload until saving works again.`
+				}
+			});
+		});
 	}
 
 	/** HTTPS credentials for a repository's provider, if a token is available (never throws). */

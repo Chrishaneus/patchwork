@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EngineEvent, Task } from '#lib/engine/contract.js';
 import type { AgentRunner } from '../agent/runner';
 import { createEngine } from '../index';
@@ -125,6 +125,24 @@ describe('runs', () => {
 
 		const failed = await waitForStatus(engine, tasks[0].id, ['failed']);
 		expect(failed.error).toEqual({ code: 'agent_failed', message: 'model unavailable' });
+	});
+
+	it('warns once when the activity log can’t be saved', async () => {
+		const { engine, events, repo, dataDir } = await setup(editingAgent);
+		writeFileSync(path.join(dataDir, 'logs'), 'not a folder');
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		try {
+			const { tasks } = await engine.startRun({ repositoryIds: [repo.id], instruction: 'x' });
+			await waitForStatus(engine, tasks[0].id, ['awaiting_review', 'failed']);
+
+			const warnings = events.filter(
+				(e) => e.type === 'task.log' && e.entry.text.includes("activity log couldn't be saved")
+			);
+			expect(warnings).toHaveLength(1);
+			expect(consoleError).toHaveBeenCalledOnce();
+		} finally {
+			consoleError.mockRestore();
+		}
 	});
 
 	it('validates the request before starting', async () => {

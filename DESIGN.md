@@ -459,6 +459,11 @@ Built in M4:
     stops the engine with `data_too_new` rather than being changed. Add a step before changing
     the shape of anything saved. There are none yet, so the version is 1.
   - Runs are still never pruned, and all of them are loaded into memory.
+- **Task logs**: one JSON line per entry in `logs/<task id>.jsonl`, appended in order
+  (`core/logs.ts`). If an entry can't be saved (a full disk), the first failure for that task is
+  logged on the server and shown as an error in the live log. Entries lost after that are only
+  counted. Once saving works again, a line saying how many are missing and why is written where
+  they would have been. Lines cut short by a failed write are skipped when the log is read.
 - **Secrets** (API keys, tokens), behind a `SecretStore` interface each host implements:
   - Desktop: one file in the app's data folder, readable only by your user. Secrets are encrypted
     with Electron `safeStorage` when the system has a keychain. On systems without one (WSL, bare
