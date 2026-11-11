@@ -316,8 +316,16 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
     sandboxed here. That stops `sed -i`, `rm` or `> file`, but a command could change the
     permissions back, so only the sandbox makes it a boundary. `removeWorktreeOnly` makes the
     copy writable again before removing it. `claudeSandbox` (in `claude/`) turns them into the SDK's
-    `sandbox` option, `codexSandbox` into Codex's (below). A future agent without a usable
-    sandbox could run whole inside `@anthropic-ai/sandbox-runtime` (`srt`) with the same policy.
+    `sandbox` option, `codexSandbox` into Codex's (below).
+  - Agents without a usable sandbox of their own can run whole inside
+    `@anthropic-ai/sandbox-runtime` (`srt`, pinned) with the same policy: `wrapInSandbox` in
+    [`agent/wrapped.ts`](engine/agent/wrapped.ts) writes the run's srt settings to a private
+    temp file and returns the command to spawn. The agent's API hosts are added to the allowed
+    hosts, and its key is masked: inside the sandbox it's a placeholder, and srt's proxy puts the
+    real key back only on requests to those hosts. `NODE_USE_ENV_PROXY=1` makes Node's fetch use
+    the proxy. `srtSupport` also needs ripgrep on Linux. Tested on Linux (WSL); macOS is
+    untested, and native Windows is reported as unsupported (srt's Windows support is alpha).
+    No runner uses it yet.
 - **Running a command outside the sandbox:** when a task can't do something inside the sandbox
   (say, start a database container), the agent may ask to run that one command outside it.
   Runners get `requestApproval({ command, reason })` and turn their agent's own prompt into it;

@@ -123,7 +123,7 @@ export type SandboxSupport = {
 	setup: boolean;
 };
 
-const onPath = (name: string) =>
+export const onPath = (name: string) =>
 	(process.env.PATH ?? '').split(path.delimiter).some((dir) => {
 		try {
 			accessSync(path.join(dir, name), constants.X_OK);
