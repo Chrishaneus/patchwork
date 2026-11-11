@@ -323,7 +323,9 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
     temp file and returns the command to spawn. The agent's API hosts are added to the allowed
     hosts, and its key is masked: inside the sandbox it's a placeholder, and srt's proxy puts the
     real key back only on requests to those hosts. `NODE_USE_ENV_PROXY=1` makes Node's fetch use
-    the proxy. `srtSupport` also needs ripgrep on Linux. Tested on Linux (WSL); macOS is
+    the proxy. On Linux srt finds denied files with ripgrep: `findRipgrep` gives it the Claude
+    Code binary the app already ships, which runs as ripgrep when started as `rg` (`argv0`),
+    else a system `rg`; macOS matches them in Seatbelt instead. Tested on Linux (WSL); macOS is
     untested, and native Windows is reported as unsupported (srt's Windows support is alpha).
     No runner uses it yet.
 - **Running a command outside the sandbox:** when a task can't do something inside the sandbox

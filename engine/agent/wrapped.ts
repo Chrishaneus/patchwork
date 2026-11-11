@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { withoutSecrets } from '../core/env.js';
+import { findClaudeBinary } from './claude/index.js';
 import { onPath, sandboxSupport, type SandboxPolicy, type SandboxSupport } from './sandbox.js';
 
 /**
@@ -25,9 +26,10 @@ export interface WrappedAgent {
 }
 
 /** srt's settings for one run. */
-export function srtConfig(policy: SandboxPolicy, agent: WrappedAgent) {
+export function srtConfig(policy: SandboxPolicy, agent: WrappedAgent, ripgrep?: Ripgrep) {
 	const keyEnv = agent.key?.env;
 	return {
+		...(ripgrep ? { ripgrep } : {}),
 		network: {
 			allowedDomains: [...new Set([...policy.allowedDomains, ...agent.apiHosts])],
 			deniedDomains: [],
@@ -53,18 +55,35 @@ export function srtConfig(policy: SandboxPolicy, agent: WrappedAgent) {
 	};
 }
 
+const require = createRequire(import.meta.url);
+
+/** How srt runs ripgrep, which it uses to find the denied files. */
+export type Ripgrep = { command: string; argv0?: string };
+
 /**
- * Whether srt can run here: what Claude Code's sandbox needs (bubblewrap and socat on Linux),
- * plus ripgrep, which srt uses to find the denied files. Windows isn't supported yet.
+ * ripgrep for srt: the Claude Code binary the app already ships runs as ripgrep when started
+ * under the name `rg`, so nothing has to be installed. A system `rg` is the fallback.
  */
-export function srtSupport(platform: NodeJS.Platform = process.platform): SandboxSupport {
-	const base = sandboxSupport(platform);
-	if (platform !== 'linux' && platform !== 'darwin') return base;
-	if (onPath('rg')) return base;
-	return { ...base, available: false, missing: [...base.missing, 'ripgrep'] };
+export function findRipgrep(claude = findClaudeBinary(require.resolve)): Ripgrep | undefined {
+	if (claude && existsSync(claude)) return { command: claude, argv0: 'rg' };
+	return onPath('rg') ? { command: 'rg' } : undefined;
 }
 
-const require = createRequire(import.meta.url);
+/**
+ * Whether srt can run here: what Claude Code's sandbox needs (bubblewrap and socat on Linux),
+ * plus ripgrep on Linux (macOS matches denied paths in its Seatbelt profile instead). Windows
+ * isn't supported yet.
+ */
+export function srtSupport(
+	platform: NodeJS.Platform = process.platform,
+	/** null: there is none. */
+	ripgrep: Ripgrep | null = findRipgrep() ?? null
+): SandboxSupport {
+	const base = sandboxSupport(platform);
+	if (platform !== 'linux' || ripgrep) return base;
+	const missing = [...base.missing, 'ripgrep'];
+	return { ...base, available: false, missing };
+}
 
 /** srt's command-line entry point, from the installed package. */
 export function srtCli() {
@@ -93,7 +112,8 @@ export function wrapInSandbox(opts: {
 	// Outside every writable folder, so nothing in the sandbox can change its own rules.
 	const dir = mkdtempSync(path.join(tmpdir(), 'patchwork-srt-'));
 	const settings = path.join(dir, 'settings.json');
-	writeFileSync(settings, JSON.stringify(srtConfig(opts.policy, opts.agent)), { mode: 0o600 });
+	const config = srtConfig(opts.policy, opts.agent, findRipgrep());
+	writeFileSync(settings, JSON.stringify(config), { mode: 0o600 });
 	const key = opts.agent.key;
 	return {
 		command: process.execPath,

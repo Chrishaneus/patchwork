@@ -8,6 +8,7 @@ import { applyLegacyEnv, migrateDataDir } from '../engine/core/env';
 import {
 	classifyByRules,
 	createEngine,
+	findClaudeBinary,
 	findCodexBinary,
 	handleEngineCall,
 	SecretsFile,
@@ -79,21 +80,6 @@ function createFileSecrets(file: string): SecretStore {
 	};
 }
 
-/**
- * The Claude Code binary ships in a per-platform package. In a packaged app it must run from
- * app.asar.unpacked, because executables can't be started from inside the asar archive.
- */
-function findAgentExecutable(): string | undefined {
-	try {
-		const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/package.json`;
-		const dir = path.dirname(require.resolve(pkg));
-		const binary = path.join(dir, process.platform === 'win32' ? 'claude.exe' : 'claude');
-		return binary.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
-	} catch {
-		return undefined;
-	}
-}
-
 function registerIpc() {
 	// PATCHWORK_DATA_DIR lets tests and power users keep data somewhere else.
 	const dataDir = process.env.PATCHWORK_DATA_DIR ?? path.join(app.getPath('userData'), 'engine');
@@ -104,7 +90,7 @@ function registerIpc() {
 	const engine = createEngine({
 		dataDir,
 		secrets: createFileSecrets(path.join(dataDir, 'secrets.json')),
-		agentExecutable: findAgentExecutable(),
+		agentExecutable: findClaudeBinary(require.resolve),
 		codexExecutable: findCodexBinary(require.resolve),
 		// PATCHWORK_GITHUB_API_URL points at GitHub Enterprise or the local fake GitHub (npm run sandbox).
 		githubApiUrl: process.env.PATCHWORK_GITHUB_API_URL || undefined,

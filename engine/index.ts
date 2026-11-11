@@ -33,6 +33,7 @@ export { classifyByRules, type ModeClassifier } from './agent/classifier.js';
 export { FileSecretStore, SecretsFile, type SecretStore } from './core/secrets.js';
 export { createTestAgent } from './agent/test-agent.js';
 export { findCodexBinary } from './agent/codex/index.js';
+export { findClaudeBinary } from './agent/claude/index.js';
 
 export interface EngineOptions {
 	/** Folder for the engine's own data: the store, task logs and worktrees. */

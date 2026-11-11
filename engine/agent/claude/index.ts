@@ -11,6 +11,23 @@ import {
 	type SandboxSupport
 } from '../sandbox.js';
 
+/**
+ * The Claude Code binary, from the per-platform package the SDK ships it in. In a packaged app it
+ * must run from app.asar.unpacked, because executables can't be started from inside the archive.
+ */
+export function findClaudeBinary(resolve: (id: string) => string): string | undefined {
+	try {
+		const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/package.json`;
+		const binary = path.join(
+			path.dirname(resolve(pkg)),
+			process.platform === 'win32' ? 'claude.exe' : 'claude'
+		);
+		return binary.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+	} catch {
+		return undefined;
+	}
+}
+
 /** The task log's note when commands can't be sandboxed here. */
 export function noSandboxNote(support: SandboxSupport) {
 	return support.missing.length > 0

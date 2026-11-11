@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { tempDirs } from '../test-helpers';
 import type { SandboxPolicy } from './sandbox';
-import { srtConfig, srtSupport, wrapInSandbox } from './wrapped';
+import { findRipgrep, srtConfig, srtSupport, wrapInSandbox } from './wrapped';
 
 const dirs = tempDirs();
 afterEach(() => dirs.cleanup());
@@ -46,6 +46,29 @@ describe('srtConfig', () => {
 		const config = srtConfig(policy({ writable: [] }), { apiHosts: ['api.example.com'] });
 		expect(config.filesystem.allowWrite).toEqual([]);
 		expect(config.network).not.toHaveProperty('tlsTerminate');
+	});
+});
+
+describe('findRipgrep', () => {
+	it('uses the Claude Code binary as ripgrep, else a system rg', () => {
+		const claude = path.join(dirs.make('patchwork-claude-'), 'claude');
+		writeFileSync(claude, '');
+		expect(findRipgrep(claude)).toEqual({ command: claude, argv0: 'rg' });
+
+		const PATH = process.env.PATH;
+		try {
+			process.env.PATH = '';
+			expect(findRipgrep('/nowhere/claude')).toBeUndefined();
+			expect(srtSupport('linux', null)).toMatchObject({
+				available: false,
+				missing: expect.arrayContaining(['ripgrep'])
+			});
+			// macOS doesn't use ripgrep, and Windows isn't supported.
+			expect(srtSupport('darwin', null).missing).toEqual([]);
+			expect(srtSupport('win32', null).missing).toEqual([]);
+		} finally {
+			process.env.PATH = PATH;
+		}
 	});
 });
 
