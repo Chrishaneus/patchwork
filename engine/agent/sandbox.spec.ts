@@ -4,7 +4,13 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { tempDirs } from '../test-helpers';
 import { noSandboxNote } from './claude/index';
-import { credentialFiles, sandboxPolicy, sandboxSupport, windowsCredentialFiles } from './sandbox';
+import {
+	credentialFiles,
+	installCommand,
+	sandboxPolicy,
+	sandboxSupport,
+	windowsCredentialFiles
+} from './sandbox';
 
 const dirs = tempDirs();
 const PATH = process.env.PATH;
@@ -46,10 +52,12 @@ describe('sandboxSupport', () => {
 			available: false,
 			missing: ['socat'],
 			blocked: false,
-			setup: false
+			setup: false,
+			// Depends on this machine's distribution.
+			install: installCommand(['socat'])
 		});
-		expect(noSandboxNote(sandboxSupport('linux'))).toBe(
-			'Shell commands run without a sandbox: install socat to turn it on.'
+		expect(noSandboxNote(sandboxSupport('linux'))).toMatch(
+			/^Shell commands run without a sandbox: install socat to turn it on( \(sudo .+ socat\))?\.$/
 		);
 		process.env.PATH = binDir(['bwrap', 'socat']);
 		expect(sandboxSupport('linux')).toEqual({
@@ -194,5 +202,20 @@ describe('sandboxPolicy', () => {
 	it('allows no writes at all for read-only workflows', () => {
 		const cwd = dirs.make();
 		expect(sandboxPolicy({ cwd, protectedFiles: [], readOnly: true }).writable).toEqual([]);
+	});
+});
+
+describe('installCommand', () => {
+	it('uses the distribution’s package manager', () => {
+		const tools = ['bubblewrap', 'socat'];
+		expect(installCommand(tools, 'NAME="Ubuntu"\nID=ubuntu\nID_LIKE=debian\n')).toBe(
+			'sudo apt install bubblewrap socat'
+		);
+		expect(installCommand(tools, 'ID="rocky"\nID_LIKE="rhel centos fedora"\n')).toBe(
+			'sudo dnf install bubblewrap socat'
+		);
+		expect(installCommand(tools, 'ID=arch\n')).toBe('sudo pacman -S bubblewrap socat');
+		expect(installCommand(tools, 'ID=nixos\n')).toBeUndefined();
+		expect(installCommand([], 'ID=debian\n')).toBeUndefined();
 	});
 });

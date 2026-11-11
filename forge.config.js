@@ -49,7 +49,15 @@ const config = {
 	makers: [
 		{ name: '@electron-forge/maker-squirrel', platforms: ['win32'], config: {} },
 		{ name: '@electron-forge/maker-zip', platforms: ['darwin', 'linux', 'win32'], config: {} },
-		{ name: '@electron-forge/maker-deb', platforms: ['linux'], config: {} }
+		{
+			name: '@electron-forge/maker-deb',
+			platforms: ['linux'],
+			config: {
+				// The agent's shell commands are sandboxed with bubblewrap, and socat carries their
+				// network traffic to the proxy that filters it. Added to the default dependencies.
+				options: { depends: ['bubblewrap', 'socat'] }
+			}
+		}
 	]
 };
 

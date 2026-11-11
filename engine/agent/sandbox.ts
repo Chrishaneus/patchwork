@@ -121,7 +121,39 @@ export type SandboxSupport = {
 	blocked: boolean;
 	/** A one-time setup with administrator approval would turn it on (Codex on Windows). */
 	setup: boolean;
+	/** The command that installs `missing` with this system's package manager, when known. */
+	install?: string;
 };
+
+/** Package managers by distribution (`ID` or `ID_LIKE` in /etc/os-release). */
+const PACKAGE_MANAGERS: [RegExp, string][] = [
+	[/\b(debian|ubuntu)\b/, 'sudo apt install'],
+	[/\b(fedora|rhel|centos)\b/, 'sudo dnf install'],
+	[/\barch\b/, 'sudo pacman -S'],
+	[/\b(suse|opensuse)\b/, 'sudo zypper install'],
+	[/\balpine\b/, 'sudo apk add']
+];
+
+function osRelease() {
+	try {
+		return readFileSync('/etc/os-release', 'utf8');
+	} catch {
+		return '';
+	}
+}
+
+/**
+ * The command that installs these Linux packages here, or undefined for a distribution we
+ * don't know. bubblewrap, socat and ripgrep have the same package names on all of them.
+ */
+export function installCommand(packages: string[], release: string = osRelease()) {
+	const ids = [...release.matchAll(/^(ID|ID_LIKE)=["']?([^"'\n]*)/gm)]
+		.map((m) => m[2])
+		.join(' ')
+		.toLowerCase();
+	const manager = PACKAGE_MANAGERS.find(([pattern]) => pattern.test(ids))?.[1];
+	return packages.length > 0 && manager ? `${manager} ${packages.join(' ')}` : undefined;
+}
 
 export const onPath = (name: string) =>
 	(process.env.PATH ?? '').split(path.delimiter).some((dir) => {
@@ -154,7 +186,7 @@ export function sandboxSupport(platform: NodeJS.Platform = process.platform): Sa
 	]
 		.filter(([command]) => !onPath(command))
 		.map(([, pkg]) => pkg);
-	if (missing.length > 0) return { ...none, missing };
+	if (missing.length > 0) return { ...none, missing, install: installCommand(missing) };
 	const blocked = !bubblewrapWorks();
 	return { ...none, available: !blocked, blocked };
 }

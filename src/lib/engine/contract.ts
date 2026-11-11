@@ -403,6 +403,8 @@ export interface SandboxStatus {
 	missing: string[];
 	blocked: boolean;
 	setup: boolean;
+	/** The command that installs `missing` on the engine's machine, when its system is known. */
+	install?: string;
 }
 
 export interface SettingsUpdate {

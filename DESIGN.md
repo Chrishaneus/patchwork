@@ -307,6 +307,11 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
   - `sandboxSupport` checks for the tools and that bubblewrap may create namespaces. Where it
     can't run (Windows, missing tools, Docker without `seccomp=unconfined`), commands run
     unsandboxed with a note in the task log and in Settings.
+  - Missing tools come with the command that installs them (`installCommand`, by the
+    distribution in `/etc/os-release`: apt, dnf, pacman, zypper or apk), shown in the task-log
+    note, Settings (with a copy button) and the server's startup log. `npm install` prints the
+    same (`dev/check-sandbox-tools.mjs`, quiet in CI and Docker builds), and the `.deb` depends
+    on `bubblewrap` and `socat`, so apt installs them with the app.
   - The rules are agent-neutral: `sandboxPolicy` returns the writable folders (none for the
     read-only workflows), allowed hosts, denied files and denied environment variables, and each
     runner enforces them its own way. Claude Code's sandbox always lets commands write in the

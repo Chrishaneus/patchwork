@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { sandboxSupport } from '../engine/agent/sandbox.js';
 import { applyLegacyEnv, migrateDataDir } from '../engine/core/env.js';
 import {
 	classifyByRules,
@@ -79,6 +80,18 @@ server.listen(port, host, () => {
 		`  local folders: ${repositoryRoots.length ? repositoryRoots.join(', ') : 'off (repositories are added by URL)'}`
 	);
 	console.log(`  access token: ${env.PATCHWORK_TOKEN ? 'required' : 'off (localhost only)'}`);
+	const sandbox = sandboxSupport();
+	console.log(
+		`  sandbox:      ${
+			sandbox.available
+				? 'on (the agent’s shell commands are sandboxed)'
+				: sandbox.missing.length > 0
+					? `off: install ${sandbox.missing.join(' and ')}${sandbox.install ? ` (${sandbox.install})` : ''}`
+					: sandbox.blocked
+						? 'off: this system doesn’t let bubblewrap create namespaces (in Docker, see compose.yaml)'
+						: 'off: not available on this system'
+		}`
+	);
 	if (local)
 		console.log(
 			'  local mode:   on (local folders allowed; open the address above in your browser)'

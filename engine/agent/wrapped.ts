@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { withoutSecrets } from '../core/env.js';
 import { findClaudeBinary } from './claude/index.js';
-import { onPath, sandboxSupport, type SandboxPolicy, type SandboxSupport } from './sandbox.js';
+import {
+	installCommand,
+	onPath,
+	sandboxSupport,
+	type SandboxPolicy,
+	type SandboxSupport
+} from './sandbox.js';
 
 /**
  * Agents with no sandbox of their own run whole inside Anthropic's sandbox runtime (`srt`): the
@@ -82,7 +88,7 @@ export function srtSupport(
 	const base = sandboxSupport(platform);
 	if (platform !== 'linux' || ripgrep) return base;
 	const missing = [...base.missing, 'ripgrep'];
-	return { ...base, available: false, missing };
+	return { ...base, available: false, missing, install: installCommand(missing) };
 }
 
 /** srt's command-line entry point, from the installed package. */

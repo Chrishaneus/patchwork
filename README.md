@@ -161,8 +161,11 @@ connect only to package registries (npm, PyPI, crates.io, Maven and the like, no
 GitLab), and can't read the app's tokens, its saved secrets, SSH keys or git credentials. So
 pushing and opening pull requests stays with the app, after your review.
 
-- macOS has it built in. On Linux, install `bubblewrap` and `socat`. The Docker image has both,
-  and `compose.yaml` relaxes Docker's seccomp filter so bubblewrap can run.
+- macOS has it built in. On Linux, install `bubblewrap` and `socat`. The `.deb` package
+  installs them with the app, and the Docker image has both (`compose.yaml` relaxes Docker's
+  seccomp filter so bubblewrap can run). Otherwise `npm install`, the server's startup log and
+  **Settings → AI agent** say what's missing and give the install command for your
+  distribution.
 - Codex brings its own sandbox on every system, so Linux needs nothing installed (Docker still
   needs the relaxed seccomp filter). On Windows 11 24H2 and later it works as is. Older Windows
   versions need a one-time setup: **Settings → AI agent** offers a button for it, and Windows

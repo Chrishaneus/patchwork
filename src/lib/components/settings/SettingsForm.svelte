@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Copy from '@lucide/svelte/icons/copy';
 	import { onMount } from 'svelte';
 	import GitHubSignIn from '#lib/components/settings/GitHubSignIn.svelte';
 	import TemplateSettings from '#lib/components/templates/TemplateSettings.svelte';
@@ -95,6 +96,13 @@
 	const sandbox = $derived(
 		settings?.agentSandbox[agent] ?? { available: false, missing: [], blocked: false, setup: false }
 	);
+
+	let copied = $state(false);
+	async function copyInstall(command: string) {
+		await navigator.clipboard.writeText(command);
+		copied = true;
+		setTimeout(() => (copied = false), 2000);
+	}
 
 	let settingUp = $state(false);
 	async function setUpSandbox() {
@@ -201,6 +209,25 @@
 										? m.settings_sandbox_blocked()
 										: m.settings_sandbox_unsupported()}
 					</p>
+					{#if !sandbox.available && sandbox.install}
+						<div class="grid gap-2 sm:max-w-xl" data-testid="sandbox-install">
+							<p class="text-sm text-muted-foreground">{m.settings_sandbox_install()}</p>
+							<div class="flex items-center gap-2">
+								<code
+									class="min-w-0 flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-sm"
+									>{sandbox.install}</code
+								>
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={() => copyInstall(sandbox.install ?? '')}
+									><Copy />{copied
+										? m.settings_sandbox_install_copied()
+										: m.settings_sandbox_install_copy()}</Button
+								>
+							</div>
+						</div>
+					{/if}
 					{#if !sandbox.available && sandbox.setup}
 						<div>
 							<Button variant="outline" disabled={settingUp} onclick={setUpSandbox}

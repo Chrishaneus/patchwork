@@ -31,7 +31,7 @@ export function findClaudeBinary(resolve: (id: string) => string): string | unde
 /** The task log's note when commands can't be sandboxed here. */
 export function noSandboxNote(support: SandboxSupport) {
 	return support.missing.length > 0
-		? `Shell commands run without a sandbox: install ${support.missing.join(' and ')} to turn it on.`
+		? `Shell commands run without a sandbox: install ${support.missing.join(' and ')} to turn it on${support.install ? ` (${support.install})` : ''}.`
 		: support.blocked
 			? 'Shell commands run without a sandbox: this system doesn’t let bubblewrap create namespaces (in Docker, see compose.yaml).'
 			: 'Shell commands run without a sandbox: it isn’t available on this system.';

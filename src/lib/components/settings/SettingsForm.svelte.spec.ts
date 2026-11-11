@@ -8,7 +8,7 @@ import SettingsForm from './SettingsForm.svelte';
 const none = { source: null, encrypted: true } as const;
 const sandbox = { available: true, missing: [], blocked: false, setup: false };
 
-function fakeClient(autoModeModel: string | null) {
+function fakeClient(autoModeModel: string | null, over: Partial<Settings> = {}) {
 	let settings: Settings = {
 		model: 'claude-opus-5-5',
 		timeoutMinutes: 30,
@@ -21,7 +21,8 @@ function fakeClient(autoModeModel: string | null) {
 		githubAccount: null,
 		reviewAttributes: [],
 		autoModeModel,
-		agentSandbox: { claude: sandbox, codex: sandbox }
+		agentSandbox: { claude: sandbox, codex: sandbox },
+		...over
 	};
 	const updates: SettingsUpdate[] = [];
 	const client = {
@@ -64,5 +65,22 @@ describe('SettingsForm.svelte', () => {
 		await expect.element(picker).toHaveTextContent('Claude Haiku 4.5');
 		await picker.click();
 		await expect.element(page.getByRole('option', { name: 'Claude Haiku 4.5' })).toBeVisible();
+	});
+
+	it('shows the command that installs the missing sandbox tools', async () => {
+		const missing = {
+			...sandbox,
+			available: false,
+			missing: ['socat'],
+			install: 'sudo apt install socat'
+		};
+		const { client } = fakeClient('claude-haiku-5-5', {
+			agentSandbox: { claude: missing, codex: sandbox }
+		});
+		render(SettingsForm, { props: { client, events: () => () => {} } });
+
+		const install = page.getByTestId('sandbox-install');
+		await expect.element(install).toHaveTextContent('sudo apt install socat');
+		await expect.element(page.getByRole('button', { name: 'Copy command' })).toBeVisible();
 	});
 });
