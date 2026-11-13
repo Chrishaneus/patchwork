@@ -137,7 +137,7 @@ ai-tool/
 │   ├── runs/          ← queue, task lifecycle, cancel/timeout, checks, publish, discard;
 │   │                    review/explore/ask prompts and parsing (workflows.ts)
 │   ├── settings/      ← Settings page values, saved credentials, instruction templates
-│   ├── agent/         ← Claude Code and Codex runners, sandbox, tool policy, classifier, test agent
+│   ├── agent/         ← Claude Code, Codex and Gemini CLI runners, sandbox, tool policy, classifier, test agent
 │   └── providers/     ← GitHub and GitLab APIs, GitHub sign-in; index.ts picks the provider,
 │                        token and HTTPS push auth
 ├── electron/          ← main.ts, preload.ts (bundled by esbuild to dist-electron/)
@@ -276,7 +276,7 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
   packaged as a library. It runs as a native per-platform binary started by the engine process.
   Docs: https://code.claude.com/docs/en/agent-sdk.
 - **Model:** `claude-opus-5-5` by default, changeable in Settings. Picking an OpenAI model runs
-  Codex instead (see **Codex** below).
+  Codex instead, and a Google model Gemini CLI (see **Codex** and **Gemini CLI** below).
 - **Options used:**
   - `cwd` = the worktree;
   - `permissionMode: 'default'`, with `canUseTool` running our policy;
@@ -332,7 +332,13 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
     Code binary the app already ships, which runs as ripgrep when started as `rg` (`argv0`),
     else a system `rg`; macOS matches them in Seatbelt instead. Tested on Linux (WSL); macOS is
     untested, and native Windows is reported as unsupported (srt's Windows support is alpha).
-    No runner uses it yet.
+    Gemini CLI runs this way (below).
+  - Under Electron (run as Node), commander (srt) and yargs (Gemini CLI) take the app for a
+    packaged single-file one and read the script's path as the first argument. So under
+    Electron the wrapper starts srt, and an agent run by the same executable, through a small
+    launcher that drops itself from `process.argv`, sets `process.defaultApp` and imports the
+    script. srt also points `TMPDIR` at `/tmp/claude`, which only exists where Claude Code made
+    it, so each run gets its own temp folder through `CLAUDE_CODE_TMPDIR`.
 - **Running a command outside the sandbox:** when a task can't do something inside the sandbox
   (say, start a database container), the agent may ask to run that one command outside it.
   Runners get `requestApproval({ command, reason })` and turn their agent's own prompt into it;
@@ -377,6 +383,27 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
   - Verified with a real run (`gpt-6-luna`, ChatGPT login): it fixed a bug in a worktree, the
     app's `secrets.json` was unreadable, GitHub was refused by the proxy, and in an explore run
     the worktree was read-only.
+- **Gemini CLI** ([`agent/gemini/`](engine/agent/gemini/index.ts)): Google models (`gemini-…`)
+  run in `@google/gemini-cli` (pinned), headless: `--prompt`, `--output-format stream-json`,
+  `--approval-mode yolo`, `--skip-trust`. It has only "ask before running", no sandbox we can
+  give rules to, so the whole process runs inside srt (`wrapInSandbox`) and never without it:
+  where `srtSupport` says no, the run fails with what's missing.
+  - Each run gets a fresh `GEMINI_CLI_HOME` with our settings as its user settings: sign in with
+    the key, no updates, usage statistics or telemetry, `advanced.ignoreLocalEnv`, hooks off,
+    plain child processes for the shell (`node-pty` is left out of the desktop app), and not
+    Gemini's own sandbox. A system settings file would also win over the repository's
+    `.gemini/settings.json`, but Gemini only reads one from a folder owned by root. Whatever a
+    repository's settings change still runs inside srt.
+  - The key goes in `GEMINI_API_KEY`, masked by srt for `generativelanguage.googleapis.com`; the
+    client sends it as `x-goog-api-key`, a header srt substitutes. There's no login: a key from
+    Settings, then `GEMINI_API_KEY` or `GOOGLE_API_KEY`.
+  - Events: assistant text comes in deltas, and the summary is the text after the last tool
+    call, as Gemini's own `json` output picks it. API errors arrive wrapped in JSON; the
+    innermost message is shown, and an invalid key is reported as `agent_not_signed_in`.
+  - Checked with the real CLI and a made-up key, under Node and under Electron 45: it starts in
+    srt, reaches the API through srt's proxy with its certificate, and gets `API_KEY_INVALID`
+    back. Not yet run with a real key. The model list is a best guess from the CLI's own
+    constants.
   - The Auto-mode classifier stays a Claude model (`autoModeModel` in Settings, Claude Haiku by
     default, or null for the keyword rules only); without Claude credentials it falls back to the
     keyword rules.

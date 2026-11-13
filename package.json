@@ -103,6 +103,7 @@
 		"@capacitor/android": "^8.6.0",
 		"@capacitor/core": "^8.6.0",
 		"@capacitor/ios": "^8.6.0",
+		"@google/gemini-cli": "0.66.0",
 		"@openai/codex": "^0.167.0",
 		"mode-watcher": "^1.1.0",
 		"svelte-streamdown": "5.0.0",

@@ -15,13 +15,14 @@ function fakeClient(autoModeModel: string | null, over: Partial<Settings> = {}) 
 		concurrency: 2,
 		anthropicApiKey: none,
 		openaiApiKey: none,
+		geminiApiKey: none,
 		githubToken: none,
 		gitlabToken: none,
 		githubClientId: { value: null, source: null },
 		githubAccount: null,
 		reviewAttributes: [],
 		autoModeModel,
-		agentSandbox: { claude: sandbox, codex: sandbox },
+		agentSandbox: { claude: sandbox, codex: sandbox, gemini: sandbox },
 		...over
 	};
 	const updates: SettingsUpdate[] = [];
@@ -75,7 +76,7 @@ describe('SettingsForm.svelte', () => {
 			install: 'sudo apt install socat'
 		};
 		const { client } = fakeClient('claude-haiku-5-5', {
-			agentSandbox: { claude: missing, codex: sandbox }
+			agentSandbox: { claude: missing, codex: sandbox, gemini: sandbox }
 		});
 		render(SettingsForm, { props: { client, events: () => () => {} } });
 

@@ -64,7 +64,8 @@ docker compose up --build -d
   Everything in that folder becomes readable and writable by the agent, so share the narrowest
   folder that works.
 - **Agent login:** the container can't use your Claude or Codex login. Set `ANTHROPIC_API_KEY`
-  (or `OPENAI_API_KEY` for Codex) in `.env`, or save a key in Settings.
+  (or `OPENAI_API_KEY` for Codex, `GEMINI_API_KEY` for Gemini CLI) in `.env`, or save a key in
+  Settings.
 - **Commit author:** set `GIT_NAME` and `GIT_EMAIL`, otherwise publishing can't commit.
 - **Updating:** after pulling or changing code, run `docker compose up --build -d` again.
 
@@ -149,12 +150,14 @@ questions afterwards: each one gets a fresh copy, and the agent updates the repo
 changed. An updated review can be posted again.
 
 The agent is Claude Code by default. Pick an OpenAI model under **Settings → AI agent** to run
-tasks in OpenAI's Codex instead.
+tasks in OpenAI's Codex instead, or a Google model to run them in Gemini CLI.
 
 If the agent reports that it isn't signed in, it has no credentials for that model's provider.
 The desktop app and local mode can use your Claude login (or, for Codex, `codex login`). Docker
 can't, so add an Anthropic or OpenAI API key under **Settings → AI agent**, or set
-`ANTHROPIC_API_KEY` or `OPENAI_API_KEY` before `docker compose up`.
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY` before `docker compose up`. Gemini CLI always needs a
+Gemini API key (from Google AI Studio), saved in Settings or set as `GEMINI_API_KEY`: it doesn't
+use a Google login here.
 
 The agent's shell commands run in Claude Code's sandbox, or Codex's with the same rules. They can write only in the working copy,
 connect only to package registries (npm, PyPI, crates.io, Maven and the like, not GitHub or
@@ -170,6 +173,11 @@ pushing and opening pull requests stays with the app, after your review.
   needs the relaxed seccomp filter). On Windows 11 24H2 and later it works as is. Older Windows
   versions need a one-time setup: **Settings → AI agent** offers a button for it, and Windows
   asks for administrator approval.
+- Gemini CLI has no sandbox of its own, so Patchwork runs all of it, not just its commands,
+  inside Anthropic's sandbox runtime with the same rules. Its key is never readable there: the
+  sandbox's proxy adds it only to requests to the Gemini API. It needs the same `bubblewrap` and
+  `socat` on Linux, works on macOS, and doesn't run on Windows yet (use WSL). Where the sandbox
+  can't start, Gemini tasks fail rather than run unsandboxed.
 - Claude Code has no sandbox on Windows. Without one, a warning shows in the task log and under **Settings → AI
   agent**, and only the command rules (no `git push`, no `gh pr`, …) stand in the way. Those
   rules are easy to get around, so they're a safety net, not a boundary.
@@ -245,6 +253,7 @@ npm run clean            # remove build output and test leftovers
 | `PORT`, `HOST`                                                                     | Where the server listens (default `3000`, `0.0.0.0`; local mode `127.0.0.1`)         |
 | `ANTHROPIC_API_KEY`                                                                | Key for the agent, unless one is saved in Settings                                   |
 | `OPENAI_API_KEY`                                                                   | Key for Codex (OpenAI models), unless one is saved in Settings                       |
+| `GEMINI_API_KEY`                                                                   | Key for Gemini CLI (Google models), unless one is saved in Settings                  |
 | `PATCHWORK_GITHUB_CLIENT_ID`                                                       | GitHub App client ID for "Sign in with GitHub"                                       |
 | `GITHUB_TOKEN`, `GITLAB_TOKEN`                                                     | Tokens for pull requests and private clones, instead of signing in                   |
 | `PATCHWORK_GITHUB_API_URL`, `PATCHWORK_GITHUB_WEB_URL`, `PATCHWORK_GITLAB_API_URL` | GitHub Enterprise, self-hosted GitLab, or the fake servers                           |

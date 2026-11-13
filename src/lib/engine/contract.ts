@@ -374,6 +374,8 @@ export interface Settings {
 	anthropicApiKey: { source: 'saved' | 'environment' | null; encrypted: boolean };
 	/** The same for the OpenAI key Codex uses (OpenAI models); without one, `codex login`. */
 	openaiApiKey: { source: 'saved' | 'environment' | null; encrypted: boolean };
+	/** The same for the Gemini key Gemini CLI uses (Google models); it has no other login here. */
+	geminiApiKey: { source: 'saved' | 'environment' | null; encrypted: boolean };
 	/** Token used to open pull requests on GitHub (from Settings, or GITHUB_TOKEN / GH_TOKEN). */
 	githubToken: { source: 'saved' | 'environment' | null; encrypted: boolean };
 	/** Token used to open merge requests on GitLab (from Settings, or GITLAB_TOKEN). */
@@ -390,7 +392,7 @@ export interface Settings {
 	agentSandbox: Record<AgentName, SandboxStatus>;
 }
 
-export type AgentName = 'claude' | 'codex';
+export type AgentName = 'claude' | 'codex' | 'gemini';
 
 /**
  * When a sandbox isn't available, `missing` names the tools to install (Linux), `blocked` means
@@ -415,6 +417,8 @@ export interface SettingsUpdate {
 	anthropicApiKey?: string | null;
 	/** A new OpenAI key to save, or null to delete the saved key. */
 	openaiApiKey?: string | null;
+	/** A new Gemini key to save, or null to delete the saved key. */
+	geminiApiKey?: string | null;
 	/** A new GitHub token to save, or null to delete it. */
 	githubToken?: string | null;
 	/** A new GitLab token to save, or null to delete it. */

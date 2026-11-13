@@ -204,6 +204,7 @@ describe('settings', () => {
 			concurrency: 2,
 			anthropicApiKey: { source: 'saved', encrypted: true },
 			openaiApiKey: { source: 'saved', encrypted: true },
+			geminiApiKey: { source: null, encrypted: true },
 			githubToken: expect.objectContaining({ encrypted: true }),
 			gitlabToken: expect.objectContaining({ encrypted: true }),
 			githubClientId: { value: null, source: null },
@@ -222,7 +223,8 @@ describe('settings', () => {
 					missing: [],
 					blocked: expect.any(Boolean),
 					setup: false
-				}
+				},
+				gemini: expect.objectContaining({ available: expect.any(Boolean) })
 			}
 		});
 		expect(JSON.stringify(after)).not.toContain('sk-test');

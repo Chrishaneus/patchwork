@@ -10,6 +10,7 @@ import {
 	createEngine,
 	findClaudeBinary,
 	findCodexBinary,
+	findGeminiCli,
 	handleEngineCall,
 	SecretsFile,
 	type SecretStore
@@ -92,6 +93,7 @@ function registerIpc() {
 		secrets: createFileSecrets(path.join(dataDir, 'secrets.json')),
 		agentExecutable: findClaudeBinary(require.resolve),
 		codexExecutable: findCodexBinary(require.resolve),
+		geminiCli: findGeminiCli(require.resolve),
 		// PATCHWORK_GITHUB_API_URL points at GitHub Enterprise or the local fake GitHub (npm run sandbox).
 		githubApiUrl: process.env.PATCHWORK_GITHUB_API_URL || undefined,
 		gitlabApiUrl: process.env.PATCHWORK_GITLAB_API_URL || undefined,

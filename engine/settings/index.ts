@@ -7,6 +7,7 @@ import {
 } from '#lib/engine/contract.js';
 import { defaultAutoModeModel, providerOf } from '#lib/engine/models.js';
 import { codexSandboxSupport, setUpCodexSandbox } from '../agent/codex/index.js';
+import { geminiSandboxSupport } from '../agent/gemini/index.js';
 import { sandboxSupport, type SandboxSupport } from '../agent/sandbox.js';
 import type { Store } from '../core/store.js';
 import { cleanAttributes, defaultReviewAttributes } from '../runs/workflows.js';
@@ -22,9 +23,11 @@ export function createSettingsService(opts: {
 	onConcurrencyChange: (value: number) => void;
 	/** Codex's binary, to check whether its sandbox can run here. */
 	codexExecutable?: string;
+	/** Gemini CLI's script; it runs only inside srt. */
+	geminiCli?: string;
 }) {
 	const { store, credentials } = opts;
-	let sandbox: { claude: SandboxSupport; codex: SandboxSupport } | undefined;
+	let sandbox: Record<AgentName, SandboxSupport> | undefined;
 
 	/** Auto mode's model, or null for the keyword rules only. */
 	async function autoModeModel(): Promise<string | null> {
@@ -42,6 +45,7 @@ export function createSettingsService(opts: {
 			concurrency: settings.concurrency,
 			anthropicApiKey: { source: sources.anthropicApiKey, encrypted },
 			openaiApiKey: { source: sources.openaiApiKey, encrypted },
+			geminiApiKey: { source: sources.geminiApiKey, encrypted },
 			githubToken: { source: sources.githubToken, encrypted },
 			gitlabToken: { source: sources.gitlabToken, encrypted },
 			githubClientId: settings.githubClientId
@@ -54,7 +58,8 @@ export function createSettingsService(opts: {
 			autoModeModel: await autoModeModel(),
 			agentSandbox: (sandbox ??= {
 				claude: sandboxSupport(),
-				codex: codexSandboxSupport(opts.codexExecutable)
+				codex: codexSandboxSupport(opts.codexExecutable),
+				gemini: geminiSandboxSupport(opts.geminiCli)
 			})
 		};
 	}
@@ -96,6 +101,7 @@ export function createSettingsService(opts: {
 		});
 		if (update.anthropicApiKey !== undefined) await credentials.saveApiKey(update.anthropicApiKey);
 		if (update.openaiApiKey !== undefined) await credentials.saveOpenAiKey(update.openaiApiKey);
+		if (update.geminiApiKey !== undefined) await credentials.saveGeminiKey(update.geminiApiKey);
 		if (update.concurrency !== undefined) opts.onConcurrencyChange(update.concurrency);
 		if (update.githubToken !== undefined) await credentials.saveGitHubToken(update.githubToken);
 		if (update.gitlabToken !== undefined) await credentials.saveGitLabToken(update.gitlabToken);

@@ -90,9 +90,12 @@
 		}
 	}
 
-	const agentNames = { claude: 'Claude Code', codex: 'Codex' } as const;
+	const agentNames = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI' } as const;
 	/** The agent the chosen model runs in, as picked (before saving). */
-	const agent = $derived(providerOf(model) === 'openai' ? 'codex' : 'claude');
+	const agent = $derived.by(() => {
+		const provider = providerOf(model);
+		return provider === 'openai' ? 'codex' : provider === 'google' ? 'gemini' : 'claude';
+	});
 	const sandbox = $derived(
 		settings?.agentSandbox[agent] ?? { available: false, missing: [], blocked: false, setup: false }
 	);
@@ -197,17 +200,23 @@
 					>
 						{sandbox.available
 							? m.settings_sandbox_on({ agent: agentNames[agent] })
-							: agent === 'codex'
-								? sandbox.setup
-									? m.settings_sandbox_codex_setup()
+							: agent === 'gemini'
+								? sandbox.missing.length > 0
+									? m.settings_sandbox_gemini_missing({ tools: sandbox.missing.join(' + ') })
 									: sandbox.blocked
-										? m.settings_sandbox_codex_blocked()
-										: m.settings_sandbox_codex_unsupported()
-								: sandbox.missing.length > 0
-									? m.settings_sandbox_missing({ tools: sandbox.missing.join(' + ') })
-									: sandbox.blocked
-										? m.settings_sandbox_blocked()
-										: m.settings_sandbox_unsupported()}
+										? m.settings_sandbox_gemini_blocked()
+										: m.settings_sandbox_gemini_unsupported()
+								: agent === 'codex'
+									? sandbox.setup
+										? m.settings_sandbox_codex_setup()
+										: sandbox.blocked
+											? m.settings_sandbox_codex_blocked()
+											: m.settings_sandbox_codex_unsupported()
+									: sandbox.missing.length > 0
+										? m.settings_sandbox_missing({ tools: sandbox.missing.join(' + ') })
+										: sandbox.blocked
+											? m.settings_sandbox_blocked()
+											: m.settings_sandbox_unsupported()}
 					</p>
 					{#if !sandbox.available && sandbox.install}
 						<div class="grid gap-2 sm:max-w-xl" data-testid="sandbox-install">
@@ -297,6 +306,23 @@
 							tokenState={settings.openaiApiKey}
 							environmentLabel={m.settings_openai_key_status_environment()}
 							onSave={(key) => saveToken({ openaiApiKey: key })}
+						/>
+					</div>
+
+					<Separator />
+
+					<div class="grid gap-3">
+						<div>
+							<h3 class="text-sm font-medium">{m.settings_gemini_key_title()}</h3>
+							<p class="text-xs text-muted-foreground">{m.settings_gemini_key_description()}</p>
+						</div>
+						<TokenField
+							id="gemini"
+							kind="key"
+							placeholder="AIza…"
+							tokenState={settings.geminiApiKey}
+							environmentLabel={m.settings_gemini_key_status_environment()}
+							onSave={(key) => saveToken({ geminiApiKey: key })}
 						/>
 					</div>
 				</Card.Content>

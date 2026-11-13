@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import {
 	EngineError,
@@ -14,6 +15,7 @@ import {
 } from './agent/classifier.js';
 import { providerOf } from '#lib/engine/models.js';
 import { createAgentRunner } from './agent/agents.js';
+import { findGeminiCli } from './agent/gemini/index.js';
 import type { AgentRunner } from './agent/runner.js';
 import { EngineEvents } from './core/events.js';
 import { TaskLogs } from './core/logs.js';
@@ -34,6 +36,7 @@ export { FileSecretStore, SecretsFile, type SecretStore } from './core/secrets.j
 export { createTestAgent } from './agent/test-agent.js';
 export { findCodexBinary } from './agent/codex/index.js';
 export { findClaudeBinary } from './agent/claude/index.js';
+export { findGeminiCli };
 
 export interface EngineOptions {
 	/** Folder for the engine's own data: the store, task logs and worktrees. */
@@ -48,6 +51,8 @@ export interface EngineOptions {
 	agentExecutable?: string;
 	/** The same for the Codex binary (OpenAI models). */
 	codexExecutable?: string;
+	/** Gemini CLI's script (Google models); found in node_modules when not given. */
+	geminiCli?: string;
 	/** Server mode: folders repositories must live in (e.g. the mounted /repos). */
 	repositoryRoots?: string[];
 	/** Whether local folders may be added (desktop: true; server: only with repositoryRoots). */
@@ -72,6 +77,7 @@ export interface Engine extends EngineApi {
 /** Create the engine. Hosts (Electron main, the HTTP server) wrap it with `handleEngineCall`. */
 export function createEngine(options: EngineOptions): Engine {
 	const store = new Store(options.dataDir);
+	const geminiCli = options.geminiCli ?? findGeminiCli(createRequire(import.meta.url).resolve);
 	const secrets = options.secrets ?? new MemorySecretStore();
 	const events = new EngineEvents();
 	const githubAuth = createGitHubAuth({
@@ -109,6 +115,7 @@ export function createEngine(options: EngineOptions): Engine {
 			createAgentRunner({
 				claudeExecutable: options.agentExecutable,
 				codexExecutable: options.codexExecutable,
+				geminiCli,
 				// Hosts keep saved tokens here (FileSecretStore), with its temporary copies.
 				protectedFiles: [
 					path.join(options.dataDir, 'secrets.json'),
@@ -140,7 +147,8 @@ export function createEngine(options: EngineOptions): Engine {
 		envGitHubClientId: options.githubClientId,
 		githubAccount: () => githubAuth.account(),
 		onConcurrencyChange: (value) => runs.setConcurrency(value),
-		codexExecutable: options.codexExecutable
+		codexExecutable: options.codexExecutable,
+		geminiCli
 	});
 	const templates = createTemplateService(store);
 	const classifyMessage = createMessageClassifier({

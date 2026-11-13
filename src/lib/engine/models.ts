@@ -1,9 +1,9 @@
 /**
  * Models offered in Settings, grouped by provider. The provider decides the agent: Anthropic
- * models run in Claude Code, OpenAI models in Codex. Any other model ID can still be typed in
- * ("Custom model ID…").
+ * models run in Claude Code, OpenAI models in Codex, Google models in Gemini CLI. Any other model
+ * ID can still be typed in ("Custom model ID…").
  */
-export type AgentProvider = 'anthropic' | 'openai';
+export type AgentProvider = 'anthropic' | 'openai' | 'google';
 
 export interface ModelOption {
 	id: string;
@@ -61,6 +61,25 @@ export const modelProviders: ModelProvider[] = [
 			{ id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', note: 'Previous Luna' },
 			{ id: 'gpt-5.5', name: 'GPT-5.5', note: 'API keys only' }
 		]
+	},
+	{
+		id: 'google',
+		name: 'Google (Gemini CLI)',
+		models: [
+			{
+				id: 'gemini-3.1-pro-preview',
+				name: 'Gemini 3.1 Pro',
+				note: 'Preview: strongest at coding'
+			},
+			{ id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', note: 'Fast and capable, lower cost' },
+			{ id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite', note: 'Fastest and cheapest' }
+		],
+		older: [
+			{ id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', note: 'Previous Pro (preview)' },
+			{ id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash', note: 'Previous Flash' },
+			{ id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', note: 'Older Pro' },
+			{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', note: 'Older Flash' }
+		]
 	}
 ];
 
@@ -78,7 +97,8 @@ export function findModel(id: string): { provider: ModelProvider; model: ModelOp
 
 /** Which provider, and so which agent, runs a model; custom IDs go by their name. */
 export function providerOf(model: string): AgentProvider {
-	return (
-		findModel(model)?.provider.id ?? (/^(gpt-|o\d|codex)/i.test(model) ? 'openai' : 'anthropic')
-	);
+	const known = findModel(model)?.provider.id;
+	if (known) return known;
+	if (/^(gpt-|o\d|codex)/i.test(model)) return 'openai';
+	return /^gemini-/i.test(model) ? 'google' : 'anthropic';
 }
