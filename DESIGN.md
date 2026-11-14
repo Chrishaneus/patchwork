@@ -214,7 +214,9 @@ webapp) usually needs both sides designed at once. The run's first task runs tha
   each in a `Repository: <folder>` section with its own title. Those sections become each task's
   title and summary.
 - Then each repository's checks run in its own folder, and each task reports its own diff and
-  waits for review. Review and publishing stay per repository.
+  waits for review. Review and publishing stay per repository. A repository the agent left
+  unchanged skips its checks and finishes as `completed` ("No changes"), keeping its working copy
+  so a follow-up can still change it.
 - The log, approvals, cost and follow-ups are the session's and are kept on the first task. A
   follow-up or cancel on any task applies to the session; a failure fails every unfinished task.
 

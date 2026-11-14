@@ -177,18 +177,28 @@ export async function executeTogether(
 	}
 
 	for (const [i, task] of run.tasks.entries()) {
+		const current = await ctx.findTask(task.id);
+		const { stat } = await collectDiff(copies[i].path, current.baseCommit!);
+		if (stat.files === 0) {
+			// The agent left this one alone: nothing to check, review or publish. It keeps its
+			// working copy, so a follow-up can still change it.
+			say(task.id, 'Finished: no changes in this repository.');
+			await ctx.updateTask(task.id, {
+				status: 'completed',
+				finishedAt: new Date().toISOString(),
+				diffStat: stat,
+				checks: null
+			});
+			continue;
+		}
 		const command = repos[i].checkCommand;
 		if (command) {
 			const checks = await performChecks(ctx, task.id, copies[i].path, command, signal);
 			if (!checks) throw signal.reason ?? new Error('Checks stopped');
 		}
-		const current = await ctx.findTask(task.id);
-		const { stat } = await collectDiff(copies[i].path, current.baseCommit!);
 		say(
 			task.id,
-			stat.files === 0
-				? 'Finished: no changes in this repository.'
-				: `Finished: ${stat.files} ${stat.files === 1 ? 'file' : 'files'} changed, +${stat.insertions} −${stat.deletions}.`
+			`Finished: ${stat.files} ${stat.files === 1 ? 'file' : 'files'} changed, +${stat.insertions} −${stat.deletions}.`
 		);
 		await ctx.updateTask(task.id, {
 			status: 'awaiting_review',

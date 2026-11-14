@@ -53,7 +53,8 @@
 	// Reviews and explorations answer questions once they're done; each gets a fresh copy.
 	const canReply = (t: Task) =>
 		kind === 'code'
-			? ['awaiting_review', 'failed', 'cancelled'].includes(t.status) && !!t.worktreePath
+			? ['awaiting_review', 'completed', 'failed', 'cancelled'].includes(t.status) &&
+				!!t.worktreePath
 			: ['completed', 'failed', 'cancelled'].includes(t.status);
 	// Together, one agent works across every repository: replies and stops go to its session, on
 	// the first task, whichever repository is shown.
@@ -292,7 +293,7 @@
 						data-task-status={task.status}
 					>
 						<span class="w-full truncate" title={task.repositoryName}>{task.repositoryName}</span>
-						<TaskStatusBadge status={task.status} />
+						<TaskStatusBadge status={task.status} {kind} />
 					</button>
 				{/each}
 			</div>

@@ -1,10 +1,13 @@
 <script lang="ts">
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import { Badge } from '#lib/components/ui/badge/index.js';
-	import type { TaskStatus } from '#lib/engine/contract.js';
+	import type { RunKind, TaskStatus } from '#lib/engine/contract.js';
 	import { m } from '#lib/paraglide/messages.js';
 
-	let { status }: { status: TaskStatus } = $props();
+	let { status, kind = 'code' }: { status: TaskStatus; kind?: RunKind } = $props();
+
+	// A change that finishes without review: the agent left this repository alone.
+	const unchanged = $derived(kind === 'code' && status === 'completed');
 
 	const labels: Record<TaskStatus, () => string> = {
 		queued: m.task_status_queued,
@@ -22,16 +25,18 @@
 	const variant = $derived(
 		status === 'failed'
 			? 'destructive'
-			: status === 'awaiting_review' || status === 'published' || status === 'completed'
-				? 'default'
-				: ['running', 'preparing', 'checking', 'publishing'].includes(status)
-					? 'secondary'
-					: 'outline'
+			: unchanged
+				? 'outline'
+				: status === 'awaiting_review' || status === 'published' || status === 'completed'
+					? 'default'
+					: ['running', 'preparing', 'checking', 'publishing'].includes(status)
+						? 'secondary'
+						: 'outline'
 	);
 	const busy = $derived(['running', 'preparing', 'checking', 'publishing'].includes(status));
 </script>
 
 <Badge {variant} data-status={status}>
 	{#if busy}<LoaderCircle class="animate-spin" />{/if}
-	{labels[status]()}
+	{unchanged ? m.task_status_unchanged() : labels[status]()}
 </Badge>

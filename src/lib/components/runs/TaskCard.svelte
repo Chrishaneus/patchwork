@@ -71,8 +71,10 @@
 			? repository.provider
 			: null
 	);
+	// `completed` in a change: a repository the agent left unchanged, still with its working copy.
 	const canFollowUp = $derived(
-		['awaiting_review', 'failed', 'cancelled'].includes(task.status) && !!task.worktreePath
+		['awaiting_review', 'completed', 'failed', 'cancelled'].includes(task.status) &&
+			!!task.worktreePath
 	);
 	const hasChanges = $derived(!!task.worktreePath || task.status === 'published');
 	const canRecheck = $derived(task.status === 'awaiting_review' && !!repository?.checkCommand);
@@ -93,7 +95,7 @@
 	<Card.Header>
 		<Card.Title class="flex flex-wrap items-center gap-2">
 			<span>{task.repositoryName}</span>
-			<TaskStatusBadge status={task.status} />
+			<TaskStatusBadge status={task.status} {kind} />
 		</Card.Title>
 		<Card.Description class="flex flex-wrap gap-x-4 gap-y-1">
 			{#if kind === 'review' && pullRequest}

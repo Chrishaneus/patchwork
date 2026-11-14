@@ -21,13 +21,17 @@ function waitFor(engine: Engine, taskId: string, statuses: Task['status'][]) {
 	});
 }
 
-/** Records each call; writes a file in every working copy and a pull request for each. */
-function acrossAgent() {
+/**
+ * Records each call; writes a file in every working copy and a pull request for each. `skip`:
+ * folders it leaves alone, by call (the first call is 1).
+ */
+function acrossAgent(skip: Record<number, string[]> = {}) {
 	const calls: AgentRunInput[] = [];
 	const agent: AgentRunner = async (input) => {
 		calls.push(input);
 		const sections = [];
 		for (const copy of input.workingCopies ?? []) {
+			if (skip[calls.length]?.includes(copy.folder)) continue;
 			writeFileSync(path.join(copy.path, `step-${calls.length}.txt`), `${copy.folder}\n`);
 			sections.push(
 				`Repository: ${copy.folder}\nTitle: Step ${calls.length} in ${copy.folder}\n\nWhat changed in ${copy.folder}.`
@@ -97,6 +101,37 @@ describe('changes across repositories', () => {
 		expect(readFileSync(path.join(second.worktreePath!, 'step-1.txt'), 'utf8')).toBe('webapp\n');
 		expect(git(second.worktreePath!, 'branch', '--show-current')).toBe(second.branch);
 		expect(existsSync(path.join(webDir, 'step-1.txt'))).toBe(false);
+	});
+
+	it('finishes a repository the agent left alone without review, until a follow-up changes it', async () => {
+		const { agent } = acrossAgent({ 1: ['api'] });
+		const { engine, api, web } = await setup(agent);
+		await engine.updateRepository({ id: api.id, checkCommand: 'false' });
+		const run = await engine.startRun({ repositoryIds: [api.id, web.id], instruction: 'x' });
+		const [untouched, changed] = await Promise.all(
+			run.tasks.map((t) => waitFor(engine, t.id, ['awaiting_review', 'completed', 'failed']))
+		);
+
+		expect(untouched).toMatchObject({
+			status: 'completed',
+			title: null,
+			checks: null,
+			diffStat: { files: 0 }
+		});
+		expect(existsSync(untouched.worktreePath!)).toBe(true);
+		expect(changed).toMatchObject({ status: 'awaiting_review', title: 'Step 1 in webapp' });
+
+		// A follow-up from the unchanged one continues the session, and this time changes it.
+		await engine.followUpTask({ taskId: untouched.id, instruction: 'The API too' });
+		const [now] = await Promise.all(
+			run.tasks.map((t) => waitFor(engine, t.id, ['awaiting_review', 'completed', 'failed']))
+		);
+		expect(now).toMatchObject({
+			status: 'awaiting_review',
+			title: 'Step 2 in api',
+			checks: { status: 'failed' },
+			diffStat: { files: 1 }
+		});
 	});
 
 	it('runs separately when asked, with an agent each', async () => {

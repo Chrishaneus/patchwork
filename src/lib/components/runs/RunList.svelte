@@ -100,7 +100,7 @@
 						{#each run.tasks as task (task.id)}
 							<span class="flex items-center gap-1.5 text-sm">
 								{task.repositoryName}
-								<TaskStatusBadge status={task.status} />
+								<TaskStatusBadge status={task.status} kind={run.kind} />
 								{#if task.pullRequest}
 									{@const prState = task.pullRequest.state ?? 'open'}
 									<Badge variant="outline" data-pr-state={prState}

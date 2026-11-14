@@ -388,6 +388,7 @@
 	"agent_repos_hint": "Cada uno tiene su propia rama y copia de trabajo.",
 	"agent_working_count": "{count} en curso",
 	"task_status_completed": "Terminado",
+	"task_status_unchanged": "Sin cambios",
 	"nav_section_workflows": "Flujos de trabajo",
 	"error_invalid_pull_request": "No se encontró esa pull request.",
 	"error_unreadable_result": "No se pudo leer la respuesta del agente. Inténtalo de nuevo.",

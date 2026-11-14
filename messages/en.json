@@ -388,6 +388,7 @@
 	"agent_repos_hint": "Each gets its own branch and working copy.",
 	"agent_working_count": "{count} working",
 	"task_status_completed": "Done",
+	"task_status_unchanged": "No changes",
 	"nav_section_workflows": "Workflows",
 	"error_invalid_pull_request": "That pull request couldn't be found.",
 	"error_unreadable_result": "The agent's answer couldn't be read. Try again.",

@@ -172,11 +172,12 @@ export function createRunService(deps: RunServiceDeps) {
 	/** More work on a change across repositories: the same session, in the same working copies. */
 	async function followUpTogether(run: Run, asked: Task, text: string): Promise<Task> {
 		const lead = run.tasks[0];
-		const allowed: Task['status'][] = ['awaiting_review', 'failed', 'cancelled'];
+		// `completed`: a repository the agent left unchanged.
+		const allowed: Task['status'][] = ['awaiting_review', 'completed', 'failed', 'cancelled'];
 		if (run.tasks.some((t) => !allowed.includes(t.status) || !t.worktreePath || !t.baseCommit)) {
 			throw new EngineError(
 				'invalid_state',
-				'Follow-ups need every repository’s change in review (or failed or cancelled, with its working copy).'
+				'Follow-ups need every repository’s change in review (or unchanged, failed or cancelled, with its working copy).'
 			);
 		}
 		const at = new Date().toISOString();
@@ -302,7 +303,15 @@ export function createRunService(deps: RunServiceDeps) {
 			const text = instruction?.trim();
 			if (!text) throw new EngineError('invalid_input', 'Describe what else should change.');
 			const task = await findTask(taskId);
-			const kind = (await ctx.findRun(task.runId))?.kind ?? 'code';
+			const run = await ctx.findRun(task.runId);
+			const kind = run?.kind ?? 'code';
+			if (run?.together && kind === 'code') {
+				// The session's follow-up; it checks every repository's state itself.
+				if (!(await ctx.findRepository(task.repositoryId))) {
+					throw new EngineError('repository_not_found', 'The repository was removed.');
+				}
+				return followUpTogether(run, task, text);
+			}
 			// Reviews and explorations start a fresh read-only copy for each question.
 			const readOnly =
 				kind !== 'code' && ['completed', 'failed', 'cancelled'].includes(task.status);
@@ -322,8 +331,6 @@ export function createRunService(deps: RunServiceDeps) {
 			if (!(await ctx.findRepository(task.repositoryId))) {
 				throw new EngineError('repository_not_found', 'The repository was removed.');
 			}
-			const run = await ctx.findRun(task.runId);
-			if (run?.together && kind === 'code') return followUpTogether(run, task, text);
 
 			const queued = await updateTask(taskId, {
 				status: 'queued',

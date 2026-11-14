@@ -142,7 +142,10 @@ export type TaskStatus =
 	| 'failed'
 	| 'cancelled'
 	| 'discarded'
-	/** A read-only workflow (review, explore) finished; its result is on the task. */
+	/**
+	 * A read-only workflow (review, explore) finished; its result is on the task. In a change
+	 * across repositories: the agent left this repository unchanged.
+	 */
 	| 'completed';
 
 /** States in which a task is still working. */
