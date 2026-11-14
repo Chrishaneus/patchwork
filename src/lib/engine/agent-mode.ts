@@ -8,10 +8,16 @@ export function parseAgentMode(value: string | null | undefined): AgentMode {
 	return agentModes.includes(value as AgentMode) ? (value as AgentMode) : 'change';
 }
 
+const PULL_REQUEST_LINK = /https?:\/\/[^\s<>()]+?\/(?:pull|-\/merge_requests)\/\d+/gi;
+
 /** The first GitHub pull request or GitLab merge request link in a message, if any. */
 export function findPullRequestLink(text: string): string | null {
-	const match = /https?:\/\/[^\s<>()]+?\/(?:pull|-\/merge_requests)\/\d+/i.exec(text);
-	return match ? match[0] : null;
+	return findPullRequestLinks(text)[0] ?? null;
+}
+
+/** Every pull request or merge request link in a message, in order, each once. */
+export function findPullRequestLinks(text: string): string[] {
+	return [...new Set([...text.matchAll(PULL_REQUEST_LINK)].map((m) => m[0]))];
 }
 
 const REVIEW_REQUEST =

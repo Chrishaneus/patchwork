@@ -205,7 +205,11 @@
 			</div>
 		{/if}
 		{#if task.review}
-			<ReviewReport review={task.review} {pullRequest} onPost={() => runs.postReview(task.id)} />
+			<ReviewReport
+				review={task.review}
+				{pullRequest}
+				onPost={(url) => runs.postReview(task.id, url)}
+			/>
 		{/if}
 		{#if kind === 'ask' && task.summary && task.status === 'completed'}
 			<div class="mb-4 rounded-md border bg-muted/30 p-3" data-testid="answer">

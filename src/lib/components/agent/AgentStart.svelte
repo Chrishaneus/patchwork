@@ -9,6 +9,8 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import MessageCircleQuestion from '@lucide/svelte/icons/message-circle-question';
 	import MessagesSquare from '@lucide/svelte/icons/messages-square';
+	import Plus from '@lucide/svelte/icons/plus';
+	import X from '@lucide/svelte/icons/x';
 	import AgentComposer from '#lib/components/agent/AgentComposer.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import MobilePanel from '#lib/components/shared/MobilePanel.svelte';
@@ -20,9 +22,19 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
-	import { detectAgentMode, findPullRequestLink, type AgentMode } from '#lib/engine/agent-mode.js';
+	import {
+		detectAgentMode,
+		findPullRequestLink,
+		findPullRequestLinks,
+		type AgentMode
+	} from '#lib/engine/agent-mode.js';
 	import type { EngineClient } from '#lib/engine/client.js';
-	import { EngineError, type EngineErrorCode, type ReviewAttribute } from '#lib/engine/contract.js';
+	import {
+		EngineError,
+		type EngineErrorCode,
+		type PullRequestToReview,
+		type ReviewAttribute
+	} from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
@@ -52,6 +64,8 @@
 	let branch = $state('');
 	let repositoryId = $state('');
 	let pullNumber = $state('');
+	/** Pull requests picked to review together (beside any links in the message). */
+	let picked = $state<{ repositoryId: string; number: number; label: string }[]>([]);
 	let attributes = $state<ReviewAttribute[]>([]);
 	let chosen = $state<string[]>([]);
 	let error = $state<EngineErrorCode | 'no_repos' | 'no_pull' | 'no_attributes' | null>(null);
@@ -100,7 +114,29 @@
 		ask: m.agent_mode_ask
 	};
 
-	const reviewReady = $derived(!!link || (!!repositoryId && !!pullNumber));
+	const links = $derived(findPullRequestLinks(text));
+	const isPicked = (id: string, number: number) =>
+		picked.some((p) => p.repositoryId === id && p.number === number);
+	/** Keep the pull request shown in the picker, and pick another. */
+	function addPicked() {
+		const number = Number(pullNumber);
+		if (!repositoryId || !number || isPicked(repositoryId, number)) return;
+		const repo = repositories.items.find((r) => r.id === repositoryId);
+		picked = [
+			...picked,
+			{ repositoryId, number, label: `${repo?.slug ?? repo?.name ?? ''}#${number}` }
+		];
+		pullNumber = '';
+	}
+	/** Everything to review: links in the message, the picked ones, and the one in the picker. */
+	const toReview = $derived<PullRequestToReview[]>([
+		...links.map((url) => ({ url })),
+		...picked.map(({ repositoryId, number }) => ({ repositoryId, number })),
+		...(repositoryId && pullNumber && !isPicked(repositoryId, Number(pullNumber))
+			? [{ repositoryId, number: Number(pullNumber) }]
+			: [])
+	]);
+	const reviewReady = $derived(toReview.length > 0);
 	const placeholder = $derived(
 		auto && !text.trim()
 			? m.agent_placeholder_auto()
@@ -155,18 +191,13 @@
 			let runId: string;
 			if (mode === 'review') {
 				if (!reviewReady) return ((error = 'no_pull'), false);
-				const picked = attributes.filter((a) => chosen.includes(a.id));
-				if (picked.length === 0) return ((error = 'no_attributes'), false);
-				const run = await runs.startReview(
-					link
-						? { url: link, instruction: message || undefined, attributes: picked }
-						: {
-								repositoryId,
-								number: Number(pullNumber),
-								instruction: message || undefined,
-								attributes: picked
-							}
-				);
+				const rated = attributes.filter((a) => chosen.includes(a.id));
+				if (rated.length === 0) return ((error = 'no_attributes'), false);
+				const run = await runs.startReview({
+					pullRequests: toReview,
+					instruction: message || undefined,
+					attributes: rated
+				});
 				runId = run.id;
 			} else {
 				if (selected.length === 0) return ((error = 'no_repos'), false);
@@ -257,11 +288,15 @@
 	{#if mode === 'review'}
 		<MobilePanel
 			title={m.agent_panel_review()}
-			summary={link
-				? m.agent_review_link_short()
-				: pullNumber
-					? `#${pullNumber}`
-					: m.agent_review_none()}
+			summary={toReview.length > 1
+				? m.agent_review_count({ count: toReview.length })
+				: link
+					? m.agent_review_link_short()
+					: pullNumber
+						? `#${pullNumber}`
+						: picked.length
+							? picked[0].label
+							: m.agent_review_none()}
 			testid="agent-review-panel"
 			scroll
 			class="order-1 flex flex-col lg:order-2 lg:max-h-[calc(100svh-8rem)]"
@@ -269,18 +304,39 @@
 			<div class="flex min-h-0 flex-col gap-4 p-3">
 				<div class="flex flex-col gap-2">
 					<p class="hidden text-sm font-medium lg:block">{m.agent_panel_review()}</p>
-					{#if link}
+					{#each links as url (url)}
 						<p class="text-xs [overflow-wrap:anywhere] text-muted-foreground">
-							{m.agent_review_link({ link })}
+							{m.agent_review_link({ link: url })}
 						</p>
-					{:else}
-						<p class="text-xs text-muted-foreground">{m.agent_review_pick_hint()}</p>
-						<PullRequestPicker
-							{client}
-							repositories={repositories.items}
-							bind:repositoryId
-							bind:pullNumber
-						/>
+					{/each}
+					{#if picked.length > 0}
+						<ul class="flex flex-col gap-1" data-testid="picked-pulls">
+							{#each picked as pick (`${pick.repositoryId}#${pick.number}`)}
+								<li class="flex items-center gap-2 rounded-md border px-2 py-1 text-sm">
+									<span class="min-w-0 flex-1 truncate font-mono text-xs">{pick.label}</span>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										aria-label={m.agent_review_remove({ name: pick.label })}
+										onclick={() => (picked = picked.filter((p) => p !== pick))}><X /></Button
+									>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					<p class="text-xs text-muted-foreground">
+						{links.length || picked.length ? m.agent_review_together() : m.agent_review_pick_hint()}
+					</p>
+					<PullRequestPicker
+						{client}
+						repositories={repositories.items}
+						bind:repositoryId
+						bind:pullNumber
+					/>
+					{#if repositoryId && pullNumber}
+						<Button variant="outline" size="sm" onclick={addPicked}>
+							<Plus />{m.agent_review_add()}
+						</Button>
 					{/if}
 				</div>
 				<Separator />

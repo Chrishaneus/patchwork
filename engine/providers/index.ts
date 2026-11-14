@@ -34,6 +34,32 @@ export interface ProviderClient {
 	}>;
 	listOpen(slug: string): Promise<PullRequestSummary[]>;
 	comment(slug: string, number: number, body: string): Promise<string>;
+	/**
+	 * Post a review with comments on lines of the pull request. `body(notInline)` is the main
+	 * comment, given the comments that couldn't go on their lines. Returns its link and those.
+	 */
+	review(slug: string, number: number, input: ReviewInput): Promise<PostedReview>;
+}
+
+/** A comment on lines of a pull request's new version, its text ready for the provider. */
+export interface InlineComment {
+	path: string;
+	startLine: number;
+	line: number;
+	body: string;
+}
+
+export interface ReviewInput<C extends InlineComment = InlineComment> {
+	/** The commit reviewed, which the lines refer to; null to use the current head. */
+	headSha: string | null;
+	comments: C[];
+	body: (notInline: C[]) => string;
+}
+
+export interface PostedReview<C extends InlineComment = InlineComment> {
+	url: string;
+	/** Comments the provider wouldn't place on their lines; they're in the main comment. */
+	notInline: C[];
 }
 
 /** The ref a pull request's head can be fetched from, on the base repository. */

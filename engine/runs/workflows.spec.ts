@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import type { ReviewComment, ReviewedPullRequest } from '#lib/engine/contract.js';
 import {
 	reviewFocus,
 	defaultReviewAttributes,
 	extractJson,
+	inlineCommentMarkdown,
+	multiReviewPrompt,
+	parseComments,
 	parseExploration,
+	parseMultiReview,
 	parsePullRequestUrl,
 	parseReview,
 	reviewMarkdown
@@ -30,7 +35,8 @@ describe('reading the agent output', () => {
 			],
 			summary: 'Solid.',
 			verdict: 'approve',
-			postedUrl: null
+			postedUrl: null,
+			comments: []
 		});
 		expect(() => parseReview('```json\n{"scores":[]}\n```', attrs)).toThrow(
 			/no score for "Correctness"/
@@ -83,8 +89,7 @@ describe('review comment', () => {
 		const md = reviewMarkdown({
 			scores: [{ attribute: 'Security', score: 3, explanation: 'Input | not escaped' }],
 			summary: 'Mostly fine.',
-			verdict: 'request_changes',
-			postedUrl: null
+			verdict: 'request_changes'
 		});
 		expect(md).toContain('### Review: Request changes');
 		expect(md).toContain('| Security | ★★★☆☆ 3/5 | Input \\| not escaped |');
@@ -102,5 +107,158 @@ describe('reviewFocus', () => {
 		);
 		expect(reviewFocus(`${link} is the SQL safe?`)).toBe('is the SQL safe');
 		expect(reviewFocus(undefined)).toBeUndefined();
+	});
+});
+
+const pr = (number: number, repo = 'acme/api'): ReviewedPullRequest => ({
+	provider: 'github',
+	url: `https://github.com/${repo}/pull/${number}`,
+	number,
+	title: `Part ${number}`,
+	baseRef: 'main',
+	headRef: `part-${number}`
+});
+
+const scores =
+	'[{"attribute":"Correctness","score":4,"explanation":"ok"},{"attribute":"Security","score":5,"explanation":"ok"}]';
+
+describe('inline comments', () => {
+	it('keeps sensible comments and drops broken ones', () => {
+		expect(
+			parseComments([
+				{
+					path: './src/a.ts',
+					startLine: 3,
+					line: 4,
+					body: 'Use const',
+					suggestion: 'const a = 1;\n'
+				},
+				{ path: 'src/b.ts', line: 7, body: 'Why?' },
+				{ path: '../etc/passwd', line: 1, body: 'escape' },
+				{ path: '/abs.ts', line: 1, body: 'absolute' },
+				{ path: 'src/c.ts', line: 0, body: 'no line' },
+				{ path: 'src/d.ts', line: 2 },
+				{ path: 'src/e.ts', startLine: 9, line: 5, suggestion: '' }
+			])
+		).toEqual([
+			{
+				path: 'src/a.ts',
+				startLine: 3,
+				line: 4,
+				body: 'Use const',
+				suggestion: 'const a = 1;',
+				original: null,
+				inDiff: false
+			},
+			{
+				path: 'src/b.ts',
+				startLine: 7,
+				line: 7,
+				body: 'Why?',
+				suggestion: null,
+				original: null,
+				inDiff: false
+			},
+			// A start after the end is read as one line; an empty suggestion deletes it.
+			{
+				path: 'src/e.ts',
+				startLine: 5,
+				line: 5,
+				body: '',
+				suggestion: '',
+				original: null,
+				inDiff: false
+			}
+		]);
+		expect(parseComments('nope')).toEqual([]);
+	});
+
+	it('writes suggestions in GitHub’s and GitLab’s syntax, fenced past any backticks', () => {
+		const c: ReviewComment = {
+			path: 'a.md',
+			startLine: 2,
+			line: 4,
+			body: 'Tidy this.',
+			suggestion: 'Use ```code``` here',
+			original: null,
+			inDiff: true
+		};
+		expect(inlineCommentMarkdown(c, 'github')).toBe(
+			'Tidy this.\n\n````suggestion\nUse ```code``` here\n````'
+		);
+		expect(inlineCommentMarkdown(c, 'gitlab')).toBe(
+			'Tidy this.\n\n````suggestion:-2+0\nUse ```code``` here\n````'
+		);
+		expect(inlineCommentMarkdown({ ...c, suggestion: null }, 'github')).toBe('Tidy this.');
+	});
+
+	it('puts comments that can’t go inline, and the other pull requests, in the main comment', () => {
+		const text = reviewMarkdown(
+			{
+				scores: [{ attribute: 'Correctness', score: 4, explanation: 'ok' }],
+				summary: 'Fine.',
+				verdict: 'comment'
+			},
+			{
+				notInline: [
+					{
+						path: 'src/a.ts',
+						startLine: 1,
+						line: 1,
+						body: 'Rename',
+						suggestion: 'const b = 1;',
+						original: null,
+						inDiff: false
+					}
+				],
+				together: { set: 'They fit.', others: ['https://github.com/acme/web/pull/3'] }
+			}
+		);
+		expect(text).toContain('Reviewed together with https://github.com/acme/web/pull/3. They fit.');
+		expect(text).toContain('**`src/a.ts`**, line 1: Rename');
+		expect(text).toContain('```\nconst b = 1;\n```');
+	});
+});
+
+describe('reviewing several pull requests', () => {
+	it('lists each with its folder and diff, and asks how they fit together', () => {
+		const prompt = multiReviewPrompt(
+			[
+				{ pullRequest: pr(1), folder: 'api-1', repository: 'acme/api', baseCommit: 'aaa' },
+				{
+					pullRequest: pr(3, 'acme/web'),
+					folder: 'web-3',
+					repository: 'acme/web',
+					baseCommit: 'bbb'
+				}
+			],
+			attrs,
+			'check the API contract'
+		);
+		expect(prompt).toContain('- https://github.com/acme/api/pull/1 in `api-1`');
+		expect(prompt).toContain('`git -C web-3 diff bbb...HEAD`');
+		expect(prompt).toContain('check the API contract');
+		expect(prompt).toMatch(/fit together/);
+	});
+
+	it('reads the set and each pull request, matched by link or else by position', () => {
+		const text = `\`\`\`json
+{"scores": ${scores}, "summary": "They fit.", "verdict": "comment", "pullRequests": [
+  {"url": "https://github.com/acme/web/pull/3", "scores": ${scores}, "summary": "Web side.", "verdict": "approve",
+   "comments": [{"path": "src/app.ts", "line": 2, "body": "x", "suggestion": "y"}]},
+  {"scores": ${scores}, "summary": "API side.", "verdict": "request_changes"}
+]}
+\`\`\``;
+		const review = parseMultiReview(text, attrs, [pr(1), pr(3, 'acme/web')]);
+		expect(review).toMatchObject({ summary: 'They fit.', verdict: 'comment', postedUrl: null });
+		expect(review.pullRequests).toMatchObject([
+			{ number: 1, summary: 'API side.', verdict: 'request_changes', comments: [] },
+			{ number: 3, summary: 'Web side.', verdict: 'approve', comments: [{ path: 'src/app.ts' }] }
+		]);
+		expect(() =>
+			parseMultiReview(`\`\`\`json\n{"scores": ${scores}, "pullRequests": []}\n\`\`\``, attrs, [
+				pr(1)
+			])
+		).toThrow(/nothing on https:\/\/github.com\/acme\/api\/pull\/1/);
 	});
 });

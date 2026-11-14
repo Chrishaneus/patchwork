@@ -138,7 +138,9 @@
 				class="line-clamp-2 min-w-0 flex-1 text-xl font-semibold tracking-tight [overflow-wrap:anywhere]"
 			>
 				{run.kind === 'review'
-					? m.review_run_title({ title: run.pullRequest?.title ?? run.instruction })
+					? (run.pullRequests?.length ?? 0) > 1
+						? m.review_run_title_many({ count: run.pullRequests!.length })
+						: m.review_run_title({ title: run.pullRequest?.title ?? run.instruction })
 					: run.instruction}
 			</h1>
 			<Button variant="outline" size="sm" href={resolve(localizeHref(`/runs/${run.id}`) as Path)}>
@@ -153,7 +155,7 @@
 					<ReviewReport
 						review={task.review}
 						pullRequest={run.pullRequest}
-						onPost={() => runs.postReview(task.id)}
+						onPost={(url) => runs.postReview(task.id, url)}
 					/>
 				{:else if task?.exploration}
 					<ExplorationReport

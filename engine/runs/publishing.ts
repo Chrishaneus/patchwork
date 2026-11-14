@@ -3,13 +3,20 @@ import {
 	type EngineErrorData,
 	type PublishInput,
 	type PullRequest,
+	type Repository,
+	type ReviewResult,
 	type Task
 } from '#lib/engine/contract.js';
 import { commitChanges, pushBranch } from '../git/publish.js';
 import { removeWorktreeOnly } from '../git/worktrees.js';
-import { providerAuthEnv, providerFor, supportsPullRequests } from '../providers/index.js';
+import {
+	providerAuthEnv,
+	providerFor,
+	supportsPullRequests,
+	type InlineComment
+} from '../providers/index.js';
 import type { RunContext } from './context.js';
-import { reviewMarkdown } from './workflows.js';
+import { inlineCommentMarkdown, reviewMarkdown } from './workflows.js';
 
 /**
  * Commit, push and open the pull request. Failures leave the task in review with
@@ -83,27 +90,86 @@ export async function publishTask(ctx: RunContext, input: PublishInput): Promise
 	}
 }
 
-/** Post a finished review on its pull request, as a comment. */
-export async function postReview(ctx: RunContext, taskId: string): Promise<Task> {
+/** One pull request's review, posted with its comments on their lines where they fit. */
+async function postOne(
+	ctx: RunContext,
+	repo: Repository,
+	number: number,
+	review: Pick<ReviewResult, 'scores' | 'summary' | 'verdict' | 'comments' | 'headSha'>,
+	together?: { set: string; others: string[] }
+): Promise<string> {
+	const provider = await providerFor(repo, ctx.deps.providers);
+	if (!provider || !repo.slug) {
+		throw new EngineError('invalid_state', `${repo.name} is not on GitHub or GitLab.`);
+	}
+	const comments = review.comments ?? [];
+	// Only lines in the diff can carry a comment; the rest go in the main comment.
+	const inline = comments.filter((c) => c.inDiff);
+	const byInline = new Map(
+		inline.map((c) => [{ ...c, body: inlineCommentMarkdown(c, provider.kind) } as InlineComment, c])
+	);
+	const outside = comments.filter((c) => !c.inDiff);
+	const { url } = await provider.review(repo.slug, number, {
+		headSha: review.headSha ?? null,
+		comments: [...byInline.keys()],
+		body: (notInline) =>
+			reviewMarkdown(review, {
+				notInline: [...notInline.map((c) => byInline.get(c)!), ...outside],
+				together
+			})
+	});
+	return url;
+}
+
+/**
+ * Post a finished review on its pull request: the scores and summary as a review comment, and
+ * its comments on their lines. With several pull requests, each gets its own; `url` picks one.
+ */
+export async function postReview(ctx: RunContext, taskId: string, url?: string): Promise<Task> {
 	const task = await ctx.findTask(taskId);
 	const run = await ctx.findRun(task.runId);
 	if (!task.review || !run?.pullRequest) {
 		throw new EngineError('invalid_state', 'Only finished reviews can be posted.');
 	}
-	if (task.review.postedUrl) return task;
-	const repo = await ctx.findRepository(task.repositoryId);
-	if (!repo) throw new EngineError('repository_not_found', 'The repository was removed.');
-	const provider = await providerFor(repo, ctx.deps.providers);
-	if (!provider || !repo.slug) {
-		throw new EngineError('invalid_state', 'This repository is not on GitHub or GitLab.');
+	const review = task.review;
+	if (!review.pullRequests) {
+		if (review.postedUrl) return task;
+		const repo = await ctx.findRepository(task.repositoryId);
+		if (!repo) throw new EngineError('repository_not_found', 'The repository was removed.');
+		const postedUrl = await postOne(ctx, repo, run.pullRequest.number, review);
+		ctx.log(taskId, { kind: 'info', text: `Posted the review: ${postedUrl}` });
+		return ctx.updateTask(taskId, { review: { ...review, postedUrl } });
 	}
-	const postedUrl = await provider.comment(
-		repo.slug,
-		run.pullRequest.number,
-		reviewMarkdown(task.review)
+
+	const targets = review.pullRequests.filter(
+		(pr) => !pr.postedUrl && (url === undefined || pr.url === url)
 	);
-	ctx.log(taskId, { kind: 'info', text: `Posted the review: ${postedUrl}` });
-	return ctx.updateTask(taskId, { review: { ...task.review, postedUrl } });
+	if (url !== undefined && !review.pullRequests.some((pr) => pr.url === url)) {
+		throw new EngineError('invalid_input', 'That pull request isn’t part of this review.');
+	}
+	let latest = task;
+	for (const pr of targets) {
+		const reviewed = run.pullRequests?.find((p) => p.url === pr.url);
+		const repo = await ctx.findRepository(reviewed?.repositoryId ?? task.repositoryId);
+		if (!repo) throw new EngineError('repository_not_found', 'A repository was removed.');
+		const others = review.pullRequests
+			.filter((other) => other.url !== pr.url)
+			.map((other) => other.url);
+		const postedUrl = await postOne(ctx, repo, pr.number, pr, {
+			set: review.summary,
+			others
+		});
+		ctx.log(taskId, { kind: 'info', text: `Posted the review of #${pr.number}: ${postedUrl}` });
+		// Saved one at a time, so a failure later on doesn't lose what was posted.
+		const current = (await ctx.findTask(taskId)).review!;
+		latest = await ctx.updateTask(taskId, {
+			review: {
+				...current,
+				pullRequests: current.pullRequests!.map((p) => (p.url === pr.url ? { ...p, postedUrl } : p))
+			}
+		});
+	}
+	return latest;
 }
 
 /** Refresh the state of open pull requests from their providers. */

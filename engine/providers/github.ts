@@ -4,6 +4,7 @@ import {
 	type PullRequestState,
 	type PullRequestSummary
 } from '#lib/engine/contract.js';
+import type { InlineComment, PostedReview, ReviewInput } from './index.js';
 
 export interface OpenPullRequestInput {
 	/** `owner/name` */
@@ -169,6 +170,40 @@ export function createGitHubClient(opts: { apiUrl: string; token: string }) {
 				baseRef: p.base.ref,
 				draft: Boolean(p.draft)
 			}));
+		},
+
+		/**
+		 * A review (a comment, never an approval or a change request) with comments on lines,
+		 * anchored to the commit reviewed. If GitHub refuses the line comments (say, the pull
+		 * request changed under them), it's posted again with them in the main comment.
+		 */
+		async review(slug: string, number: number, input: ReviewInput): Promise<PostedReview> {
+			const post = (comments: InlineComment[], notInline: InlineComment[]) =>
+				request('POST', `/repos/${slug}/pulls/${number}/reviews`, {
+					body: input.body(notInline),
+					event: 'COMMENT',
+					...(input.headSha ? { commit_id: input.headSha } : {}),
+					comments: comments.map((c) => ({
+						path: c.path,
+						line: c.line,
+						side: 'RIGHT',
+						...(c.startLine < c.line ? { start_line: c.startLine, start_side: 'RIGHT' } : {}),
+						body: c.body
+					}))
+				});
+			let notInline: InlineComment[] = [];
+			let res = await post(input.comments, notInline);
+			if (res.status === 422 && input.comments.length > 0) {
+				notInline = input.comments;
+				res = await post([], notInline);
+			}
+			if (res.status !== 200 && res.status !== 201) {
+				throw new EngineError(
+					'github_failed',
+					`GitHub refused the review (${res.status}): ${describe(res.data)}`
+				);
+			}
+			return { url: String((res.data as { html_url?: string }).html_url ?? ''), notInline };
 		},
 
 		/** Post a review comment (not an approval or a change request). Returns its link. */

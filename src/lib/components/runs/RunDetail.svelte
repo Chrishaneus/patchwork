@@ -27,7 +27,9 @@
 	{@const kind = run.kind ?? 'code'}
 	<PageHeader
 		title={kind === 'review'
-			? m.review_run_title({ title: run.pullRequest?.title ?? run.instruction })
+			? (run.pullRequests?.length ?? 0) > 1
+				? m.review_run_title_many({ count: run.pullRequests!.length })
+				: m.review_run_title({ title: run.pullRequest?.title ?? run.instruction })
 			: kind === 'explore'
 				? m.explore_run_title({ idea: run.instruction })
 				: run.instruction}

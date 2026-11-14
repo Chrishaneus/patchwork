@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { detectAgentMode, findPullRequestLink, parseAgentMode } from './agent-mode';
+import {
+	detectAgentMode,
+	findPullRequestLink,
+	findPullRequestLinks,
+	parseAgentMode
+} from './agent-mode';
 
 describe('agent mode', () => {
 	it('reads the mode from the link, defaulting to a change', () => {
@@ -39,5 +44,19 @@ describe('agent mode', () => {
 		['', 'change']
 	])('detects %j as %s', (text, mode) => {
 		expect(detectAgentMode(text)).toBe(mode);
+	});
+});
+
+describe('findPullRequestLinks', () => {
+	it('finds every link, in order, each once', () => {
+		expect(
+			findPullRequestLinks(
+				'review https://github.com/acme/api/pull/12 and https://gitlab.com/g/web/-/merge_requests/3, then https://github.com/acme/api/pull/12 again'
+			)
+		).toEqual([
+			'https://github.com/acme/api/pull/12',
+			'https://gitlab.com/g/web/-/merge_requests/3'
+		]);
+		expect(findPullRequestLinks('no links')).toEqual([]);
 	});
 });

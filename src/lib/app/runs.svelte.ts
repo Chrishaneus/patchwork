@@ -95,8 +95,8 @@ export class RunsState {
 	}
 
 	/** Post a finished review on GitHub or GitLab. */
-	postReview(taskId: string) {
-		return this.act(taskId, () => this.client.postReview({ taskId }));
+	postReview(taskId: string, url?: string) {
+		return this.act(taskId, () => this.client.postReview(url ? { taskId, url } : { taskId }));
 	}
 
 	async loadLog(taskId: string) {

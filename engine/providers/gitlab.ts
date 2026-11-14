@@ -5,6 +5,7 @@ import {
 	type PullRequestSummary
 } from '#lib/engine/contract.js';
 import type { OpenPullRequestInput } from './github.js';
+import type { InlineComment, PostedReview, ReviewInput } from './index.js';
 
 interface GitLabMergeRequest {
 	iid: number;
@@ -158,6 +159,38 @@ export function createGitLabClient(opts: { apiUrl: string; token: string }) {
 				baseRef: m.target_branch,
 				draft: Boolean(m.draft)
 			}));
+		},
+
+		/**
+		 * Comments on lines become discussions on the merge request's diff; the ones GitLab won't
+		 * place go in the main note, posted last.
+		 */
+		async review(slug: string, iid: number, input: ReviewInput): Promise<PostedReview> {
+			const mr = await request('GET', `${project(slug)}/merge_requests/${iid}`);
+			const refs = (mr.data as { diff_refs?: Record<string, string> | null }).diff_refs;
+			// The lines refer to the commit reviewed; if the merge request moved on, they may not fit.
+			const placeable = !!refs && (!input.headSha || refs.head_sha === input.headSha);
+			const notInline: InlineComment[] = [];
+			for (const c of input.comments) {
+				if (!placeable) {
+					notInline.push(c);
+					continue;
+				}
+				const res = await request('POST', `${project(slug)}/merge_requests/${iid}/discussions`, {
+					body: c.body,
+					position: {
+						position_type: 'text',
+						base_sha: refs!.base_sha,
+						start_sha: refs!.start_sha,
+						head_sha: refs!.head_sha,
+						new_path: c.path,
+						old_path: c.path,
+						new_line: c.line
+					}
+				});
+				if (res.status !== 200 && res.status !== 201) notInline.push(c);
+			}
+			return { url: await this.comment(slug, iid, input.body(notInline)), notInline };
 		},
 
 		async comment(slug: string, iid: number, body: string): Promise<string> {

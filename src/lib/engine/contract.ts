@@ -230,6 +230,8 @@ export interface Task {
 	followUps: FollowUp[];
 	/** Review workflow: the scored review of the pull request. */
 	review: ReviewResult | null;
+	/** A review of several pull requests: their working copies (in `worktreePath`), to remove. */
+	workingCopies?: { repositoryId: string; path: string }[];
 	/** Explore workflow: the approaches the agent found. */
 	exploration: Exploration | null;
 	/** The agent is waiting for you to allow (or deny) a command outside the sandbox. */
@@ -268,12 +270,56 @@ export interface ReviewScore {
 	explanation: string;
 }
 
+export type ReviewVerdict = 'approve' | 'comment' | 'request_changes';
+
+/** A comment on some lines of a pull request, usually with a suggested replacement. */
+export interface ReviewComment {
+	/** The file, relative to its repository's root. */
+	path: string;
+	/** First and last line (1-based) in the pull request's version; equal for a single line. */
+	startLine: number;
+	line: number;
+	body: string;
+	/** What those lines should become; null for a comment without code. */
+	suggestion: string | null;
+	/** Those lines as the pull request has them, read by the app; null when they couldn't be read. */
+	original: string | null;
+	/** Whether the lines are part of the pull request's changes, so it can be posted inline. */
+	inDiff: boolean;
+}
+
+/** The review of one pull request among several reviewed together. */
+export interface PullRequestReview {
+	url: string;
+	number: number;
+	title: string;
+	provider: 'github' | 'gitlab';
+	scores: ReviewScore[];
+	summary: string;
+	verdict: ReviewVerdict;
+	comments: ReviewComment[];
+	/** The commit reviewed; inline comments are anchored to it. */
+	headSha: string | null;
+	/** Set once posted on GitHub or GitLab. */
+	postedUrl: string | null;
+}
+
+/**
+ * One pull request's review, or, when several were reviewed together (`pullRequests`), the
+ * assessment of the set as a whole, with each one's own review below it.
+ */
 export interface ReviewResult {
 	scores: ReviewScore[];
 	summary: string;
-	verdict: 'approve' | 'comment' | 'request_changes';
-	/** Set once the review was posted on GitHub or GitLab. */
+	verdict: ReviewVerdict;
+	/** Set once the review was posted on GitHub or GitLab (one pull request). */
 	postedUrl: string | null;
+	/** Inline comments and suggestions (one pull request; missing in older reviews). */
+	comments?: ReviewComment[];
+	/** The commit reviewed (one pull request). */
+	headSha?: string | null;
+	/** Several pull requests reviewed together: each one's review, in the order given. */
+	pullRequests?: PullRequestReview[];
 }
 
 export interface Approach {
@@ -296,7 +342,7 @@ export interface Exploration {
 /** What a run does. */
 export type RunKind = 'code' | 'review' | 'explore' | 'ask';
 
-/** The pull request a review run looks at. */
+/** A pull request a review run looks at. */
 export interface ReviewedPullRequest {
 	provider: 'github' | 'gitlab';
 	url: string;
@@ -304,6 +350,15 @@ export interface ReviewedPullRequest {
 	title: string;
 	baseRef: string;
 	headRef: string;
+	/** Its repository (missing in older runs, where it's the task's). */
+	repositoryId?: string;
+}
+
+/** A pull request to review: by link, or by repository and number. */
+export interface PullRequestToReview {
+	url?: string;
+	repositoryId?: string;
+	number?: number;
 }
 
 /** An open pull request, for picking one to review. */
@@ -335,8 +390,10 @@ export interface Run {
 	tasks: Task[];
 	/** Runs made before workflows existed are code runs. */
 	kind?: RunKind;
-	/** Review runs: the pull request under review. */
+	/** Review runs: the pull request under review (the first one, when there are several). */
 	pullRequest?: ReviewedPullRequest;
+	/** Review runs of several related pull requests, possibly in different repositories. */
+	pullRequests?: ReviewedPullRequest[];
 	/** Review runs: the attributes it was rated on. */
 	attributes?: ReviewAttribute[];
 	/** Review: what the person asked to look at besides the link. */
@@ -604,18 +661,24 @@ export interface EngineApi {
 	listPullRequests(input: { repositoryId: string }): Promise<PullRequestSummary[]>;
 	/**
 	 * Review a pull request: by URL (the repository is added if needed) or by repository and
-	 * number. Returns at once; the scored review lands on the task.
+	 * number. Or several related ones together (`pullRequests`, up to 6, any repositories): one
+	 * agent sees them all and reviews each and how they fit. Returns at once; the scored review
+	 * lands on the task.
 	 */
 	startReview(input: {
 		url?: string;
 		repositoryId?: string;
 		number?: number;
+		pullRequests?: PullRequestToReview[];
 		attributes: ReviewAttribute[];
 		/** Your message, shown in the conversation; text besides the link is passed to the agent. */
 		instruction?: string;
 	}): Promise<Run>;
-	/** Post a finished review on GitHub or GitLab as a comment. */
-	postReview(input: { taskId: string }): Promise<Task>;
+	/**
+	 * Post a finished review on GitHub or GitLab, with its suggestions as inline comments. With
+	 * several pull requests, `url` picks one; without it, every one not posted yet.
+	 */
+	postReview(input: { taskId: string; url?: string }): Promise<Task>;
 	/** Explore ways to implement an idea, read-only; the approaches land on each task. */
 	startExplore(input: { repositoryIds: string[]; idea: string }): Promise<Run>;
 	/** Ask a question about the code, read-only; the answer is the task's summary. */

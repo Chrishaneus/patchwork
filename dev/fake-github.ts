@@ -46,7 +46,15 @@ export interface FakeGitHub {
 	url: string;
 	pulls: FakePull[];
 	/** Reviews posted on pull requests. */
-	reviews: { repo: string; number: number; body: string; event: string; html_url: string }[];
+	reviews: {
+		repo: string;
+		number: number;
+		body: string;
+		event: string;
+		html_url: string;
+		commit_id?: string;
+		comments: { path: string; line: number; start_line?: number; side?: string; body: string }[];
+	}[];
 	/** Set a PR's state, like merging or closing it on GitHub. */
 	setState: (repo: string, number: number, state: 'open' | 'closed' | 'merged') => void;
 	/** Approve (or deny) the most recent device-flow sign-in, like clicking the button on GitHub. */
@@ -287,13 +295,25 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
 			const repo = `${parts[1]}/${parts[2]}`;
 			const pull = pulls.find((p) => p.repo === repo && p.number === Number(parts[4]));
 			if (!pull) return sendJson(res, 404, { message: 'Not Found' });
-			const input = (await readForm(req)) as { body?: string; event?: string };
+			const input = (await readForm(req)) as {
+				body?: string;
+				event?: string;
+				commit_id?: string;
+				comments?: FakeGitHub['reviews'][number]['comments'];
+			};
+			const comments = input.comments ?? [];
+			// Like GitHub: a line comment needs a line and a path.
+			if (comments.some((c) => !c.path || !(c.line >= 1))) {
+				return sendJson(res, 422, { message: 'Unprocessable Entity' });
+			}
 			const review = {
 				repo,
 				number: pull.number,
 				body: input.body ?? '',
 				event: input.event ?? 'COMMENT',
-				html_url: `${pull.html_url}#pullrequestreview-${reviews.length + 1}`
+				html_url: `${pull.html_url}#pullrequestreview-${reviews.length + 1}`,
+				commit_id: input.commit_id,
+				comments
 			};
 			reviews.push(review);
 			return sendJson(res, 200, { id: reviews.length, html_url: review.html_url });

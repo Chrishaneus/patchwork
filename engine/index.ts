@@ -221,7 +221,7 @@ export function createEngine(options: EngineOptions): Engine {
 
 		listPullRequests: ({ repositoryId }) => runs.listPullRequests(repositoryId),
 		startReview: afterReady((input) => runs.startReview(input)),
-		postReview: ({ taskId }) => runs.postReview(taskId),
+		postReview: ({ taskId, url }) => runs.postReview(taskId, url),
 		startAsk: afterReady(({ repositoryIds, question }) =>
 			runs.startReadOnly({ kind: 'ask', repositoryIds, text: question })
 		),

@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentRunner } from './runner.js';
@@ -7,7 +9,29 @@ import type { AgentRunner } from './runner.js';
  * - "edit": logs a few steps, writes a file and finishes. When the instruction mentions "outside
  *   the sandbox", it first asks to run `docker compose up -d` there.
  * - "hang": waits until it is cancelled.
+ * Reviews answer with scores and one suggestion on the first changed file, per pull request.
  */
+/**
+ * A review comment on the first line of the first file the pull request changes, suggesting it
+ * in capitals; none when there's nothing to comment on.
+ */
+function suggestOn(dir: string, base: string | undefined) {
+	if (!base) return [];
+	try {
+		const file = execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], {
+			cwd: dir,
+			encoding: 'utf8'
+		})
+			.split('\n')
+			.find(Boolean);
+		if (!file) return [];
+		const first = readFileSync(path.join(dir, file), 'utf8').split('\n')[0];
+		return [{ path: file, line: 1, body: 'Say it louder.', suggestion: first.toUpperCase() }];
+	} catch {
+		return [];
+	}
+}
+
 export function createTestAgent(mode: string): AgentRunner {
 	return async ({ cwd, instruction, signal, log, mode: workflow, attributes, requestApproval }) => {
 		const wait = (ms: number) =>
@@ -35,7 +59,30 @@ export function createTestAgent(mode: string): AgentRunner {
 				score: 5 - (i % 3),
 				explanation: `${a.name}: checked by the test agent.`
 			}));
-			const json = { scores, summary: 'The change is small and clear.', verdict: 'comment' };
+			// Several pull requests: each listed with its folder and diff command.
+			const listed = [
+				...instruction.matchAll(/^- (\S+) in `([^`]+)`.*?`git -C \S+ diff (\w+)\.\.\.HEAD`/gm)
+			];
+			const json =
+				listed.length > 0
+					? {
+							scores,
+							summary: 'The pull requests fit together.',
+							verdict: 'comment',
+							pullRequests: listed.map(([, url, folder, base]) => ({
+								url,
+								scores,
+								summary: `Reviewed ${url}.`,
+								verdict: 'comment',
+								comments: suggestOn(path.join(cwd, folder), base)
+							}))
+						}
+					: {
+							scores,
+							summary: 'The change is small and clear.',
+							verdict: 'comment',
+							comments: suggestOn(cwd, /git diff (\w+)\.\.\.HEAD/.exec(instruction)?.[1])
+						};
 			const summary = `Reviewed the pull request.\n\n\`\`\`json\n${JSON.stringify(json, null, 2)}\n\`\`\``;
 			log({ kind: 'result', text: summary });
 			return { summary, costUsd: 0.02, turns: 3 };

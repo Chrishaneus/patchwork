@@ -73,7 +73,36 @@ export async function findPullRequestToReview(
 			number,
 			title: details.title,
 			baseRef: details.baseRef,
-			headRef: details.headRef
+			headRef: details.headRef,
+			repositoryId: repo.id
 		}
 	};
+}
+
+/** At most this many pull requests in one review. */
+export const MAX_REVIEWED_PULL_REQUESTS = 6;
+
+/**
+ * The pull requests to review together, in the order given, each found (or its repository
+ * added) like a single one; the same pull request twice counts once.
+ */
+export async function findPullRequestsToReview(
+	ctx: RunContext,
+	inputs: { url?: string; repositoryId?: string; number?: number }[]
+) {
+	if (!Array.isArray(inputs) || inputs.length === 0) {
+		throw new EngineError('invalid_pull_request', 'Choose a pull request.');
+	}
+	if (inputs.length > MAX_REVIEWED_PULL_REQUESTS) {
+		throw new EngineError(
+			'invalid_input',
+			`Review at most ${MAX_REVIEWED_PULL_REQUESTS} pull requests at once.`
+		);
+	}
+	const found: { repo: Repository; pullRequest: ReviewedPullRequest }[] = [];
+	for (const input of inputs) {
+		const next = await findPullRequestToReview(ctx, input ?? {});
+		if (!found.some((f) => f.pullRequest.url === next.pullRequest.url)) found.push(next);
+	}
+	return found;
 }

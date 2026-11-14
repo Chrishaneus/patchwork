@@ -30,7 +30,7 @@ export async function git(
 export async function tryGit(
 	cwd: string,
 	args: string[],
-	opts: { timeoutMs?: number; env?: Record<string, string> } = {}
+	opts: { timeoutMs?: number; trim?: boolean; env?: Record<string, string> } = {}
 ): Promise<string | null> {
 	try {
 		return await git(cwd, args, opts);

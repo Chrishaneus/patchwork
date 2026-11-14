@@ -105,10 +105,35 @@ describe('review workflow', () => {
 		expect(existsSync(seen!.cwd)).toBe(false);
 		expect(git(repo.dir, 'branch', '--list')).not.toContain('feature');
 
+		// The suggestion is on a line the pull request adds, with that line as it is there.
+		expect(task.review!.comments).toEqual([
+			{
+				path: 'feature.txt',
+				startLine: 1,
+				line: 1,
+				body: 'Say it louder.',
+				suggestion: 'NEW FEATURE',
+				original: 'new feature',
+				inDiff: true
+			}
+		]);
+		expect(task.review!.headSha).toMatch(/^[0-9a-f]{40}$/);
+
 		const posted = await engine.postReview({ taskId: task.id });
 		expect(posted.review!.postedUrl).toBe(`${gh.url}/acme/widgets/pull/1#pullrequestreview-1`);
 		expect(gh.reviews).toHaveLength(1);
 		expect(gh.reviews[0].body).toContain('| Security | ★★★★★ 5/5 |');
+		expect(gh.reviews[0]).toMatchObject({
+			commit_id: task.review!.headSha,
+			comments: [
+				{
+					path: 'feature.txt',
+					line: 1,
+					side: 'RIGHT',
+					body: 'Say it louder.\n\n```suggestion\nNEW FEATURE\n```'
+				}
+			]
+		});
 		// Posting twice doesn't post twice.
 		await engine.postReview({ taskId: task.id });
 		expect(gh.reviews).toHaveLength(1);
@@ -280,5 +305,125 @@ describe('ask workflow', () => {
 		).rejects.toMatchObject({
 			code: 'invalid_input'
 		});
+	});
+});
+
+/** Another repository on the same fake GitHub, with a pull request adding `file`. */
+function addRepoWithPullRequest(repos: Record<string, string>, slug: string, file: string) {
+	const bare = dirs.make('patchwork-remote-');
+	const repo = createGitHubLikeRepo(dirs.make(), bare, slug);
+	const other = dirs.make('patchwork-other-');
+	git(other, 'clone', '-q', bare, '.');
+	git(other, 'config', 'user.email', 'dev@example.com');
+	git(other, 'config', 'user.name', 'Dev');
+	git(other, 'switch', '-q', '-c', 'part');
+	writeFileSync(path.join(other, file), `${slug} part\n`);
+	git(other, 'add', '.');
+	git(other, 'commit', '-q', '-m', `Add ${file}`);
+	git(other, 'push', '-q', 'origin', 'part');
+	repos[slug] = bare;
+	return repo;
+}
+
+describe('reviewing several pull requests together', () => {
+	it('reviews related pull requests in different repositories as one, and posts each', async () => {
+		const repos: Record<string, string> = {};
+		const api = addRepoWithPullRequest(repos, 'acme/api', 'api.txt');
+		const web = addRepoWithPullRequest(repos, 'acme/web', 'web.txt');
+		const gh = await startFakeGitHub({ repos });
+		closers.push(gh.close);
+		for (const slug of ['acme/api', 'acme/web']) {
+			const res = await fetch(`${gh.url}/repos/${slug}/pulls`, {
+				method: 'POST',
+				headers: { authorization: 'Bearer x', 'content-type': 'application/json' },
+				body: JSON.stringify({ title: `${slug} part`, head: 'part', base: 'main' })
+			});
+			expect(res.status).toBe(201);
+		}
+		let seen: AgentRunInput | null = null;
+		const folders: string[] = [];
+		const scripted = createTestAgent('edit');
+		const engine = createEngine({
+			dataDir: dirs.make('patchwork-data-'),
+			runAgent: async (input) => {
+				seen = input;
+				const { readdirSync } = await import('node:fs');
+				folders.push(...readdirSync(input.cwd));
+				return scripted(input);
+			},
+			githubApiUrl: gh.url
+		});
+		await engine.updateSettings({ githubToken: 'test-token' });
+		const apiRepo = await engine.addRepository({ path: api.dir });
+		await engine.addRepository({ path: web.dir });
+
+		const run = await engine.startReview({
+			pullRequests: [
+				{ url: 'https://github.com/acme/api/pull/1' },
+				{ url: 'https://github.com/acme/web/pull/1' },
+				// The same one twice counts once.
+				{ url: 'https://github.com/acme/api/pull/1' }
+			],
+			attributes,
+			instruction: 'make sure the API and web agree'
+		});
+		expect(run.tasks).toHaveLength(1);
+		expect(run.tasks[0].repositoryId).toBe(apiRepo.id);
+		expect(run.pullRequests?.map((p) => p.url)).toEqual([
+			`${gh.url}/acme/api/pull/1`,
+			`${gh.url}/acme/web/pull/1`
+		]);
+		const task = await waitFor(engine, run.tasks[0].id, ['completed', 'failed']);
+		expect(task.error).toBeNull();
+
+		// One agent saw both working copies, each at its pull request's head.
+		expect(folders.sort()).toEqual(['api-1', 'web-1']);
+		expect(seen!.instruction).toMatch(/Review these 2 related pull requests together/);
+		expect(seen!.instruction).toContain('make sure the API and web agree');
+		expect(existsSync(seen!.cwd)).toBe(false);
+		expect(task.worktreePath).toBeNull();
+
+		const review = task.review!;
+		expect(review.summary).toBe('The pull requests fit together.');
+		expect(review.pullRequests).toMatchObject([
+			{
+				number: 1,
+				url: `${gh.url}/acme/api/pull/1`,
+				comments: [{ path: 'api.txt', original: 'acme/api part', inDiff: true }]
+			},
+			{
+				number: 1,
+				url: `${gh.url}/acme/web/pull/1`,
+				comments: [{ path: 'web.txt', original: 'acme/web part', inDiff: true }]
+			}
+		]);
+
+		// Post one, then the rest: each pull request gets its own review in its own repository.
+		const first = await engine.postReview({
+			taskId: task.id,
+			url: `${gh.url}/acme/web/pull/1`
+		});
+		expect(first.review!.pullRequests![1].postedUrl).toContain('/acme/web/pull/1#');
+		expect(first.review!.pullRequests![0].postedUrl).toBeNull();
+		const all = await engine.postReview({ taskId: task.id });
+		expect(all.review!.pullRequests!.every((p) => p.postedUrl)).toBe(true);
+		expect(gh.reviews.map((r) => r.repo)).toEqual(['acme/web', 'acme/api']);
+		expect(gh.reviews[0].body).toContain(`Reviewed together with ${gh.url}/acme/api/pull/1.`);
+		expect(gh.reviews[1].comments).toMatchObject([{ path: 'api.txt', line: 1 }]);
+		// Nothing is posted twice.
+		await engine.postReview({ taskId: task.id });
+		expect(gh.reviews).toHaveLength(2);
+	});
+
+	it('refuses more than six pull requests', async () => {
+		const engine = createEngine({ dataDir: dirs.make('patchwork-data-') });
+		await expect(
+			engine.startReview({
+				pullRequests: Array.from({ length: 7 }, (_, i) => ({
+					url: `https://github.com/acme/api/pull/${i + 1}`
+				})),
+				attributes
+			})
+		).rejects.toMatchObject({ code: 'invalid_input' });
 	});
 });

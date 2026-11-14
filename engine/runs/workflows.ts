@@ -2,9 +2,13 @@ import {
 	EngineError,
 	type Approach,
 	type Exploration,
+	type PullRequestReview,
 	type ReviewAttribute,
+	type ReviewComment,
 	type ReviewedPullRequest,
-	type ReviewResult
+	type ReviewResult,
+	type ReviewScore,
+	type ReviewVerdict
 } from '#lib/engine/contract.js';
 
 /** What a review rates by default; editable in Settings and per review. */
@@ -47,6 +51,20 @@ export const defaultReviewAttributes: ReviewAttribute[] = [
 const JSON_RULE =
 	'End your reply with exactly one fenced ```json code block containing only the JSON described below — no comments in it.';
 
+/** At most this many inline comments per pull request. */
+export const MAX_COMMENTS = 15;
+
+const COMMENT_RULES = [
+	`Also leave inline comments (at most ${MAX_COMMENTS} per pull request) where something specific should change, preferring lines the pull request changes. Each names a file (relative to its repository's root), the lines in the pull request's version of it, and what to change.`,
+	'When you can, include a suggestion: the exact replacement for those lines, indented as the file is, and nothing else. It replaces lines startLine to line entirely, so include every line of that range you want to keep. Leave suggestion out for a remark without code. Read the lines first so the numbers are right.'
+].join(' ');
+
+const COMMENT_SHAPE =
+	'{"path": "src/file.ts", "startLine": 10, "line": 12, "body": "why", "suggestion": "replacement code"}';
+
+const SCORES_SHAPE =
+	'"scores": [{"attribute": "<name exactly as listed>", "score": 1-5, "explanation": "..."}]';
+
 export function reviewPrompt(
 	pr: ReviewedPullRequest,
 	attributes: ReviewAttribute[],
@@ -61,8 +79,48 @@ export function reviewPrompt(
 		'Read the diff and whatever surrounding code you need to understand it. You may run read-only commands and the tests. Do not change any files: this is a review.',
 		`Rate the change from 1 (poor) to 5 (excellent) on each of these attributes:\n${list}`,
 		'For each attribute, explain the score briefly and concretely, citing files and lines where it helps. If an attribute does not apply to this change, give it 5 and say why.',
+		COMMENT_RULES,
 		JSON_RULE,
-		'Shape: {"scores": [{"attribute": "<name exactly as listed>", "score": 1-5, "explanation": "..."}], "summary": "overall assessment in a few sentences", "verdict": "approve" | "comment" | "request_changes"}'
+		`Shape: {${SCORES_SHAPE}, "summary": "overall assessment in a few sentences", "verdict": "approve" | "comment" | "request_changes", "comments": [${COMMENT_SHAPE}]}`
+	].join('\n\n');
+}
+
+/** One pull request of several, with the folder its working copy is in. */
+export interface PullRequestInFolder {
+	pullRequest: ReviewedPullRequest;
+	/** The folder, relative to the agent's working directory. */
+	folder: string;
+	repository: string;
+	baseCommit: string;
+}
+
+/**
+ * Several related pull requests, such as a change split up or stacked to be easier to review,
+ * possibly in different repositories: each in its own folder, reviewed on its own and together.
+ */
+export function multiReviewPrompt(
+	pulls: PullRequestInFolder[],
+	attributes: ReviewAttribute[],
+	focus?: string
+) {
+	const list = attributes.map((a) => `- ${a.name}: ${a.description}`).join('\n');
+	const prs = pulls
+		.map(
+			({ pullRequest: pr, folder, repository, baseCommit }) =>
+				`- ${pr.url} in \`${folder}\`: #${pr.number} "${pr.title}" in ${repository}, ${pr.headRef} into ${pr.baseRef}. Its changes: \`git -C ${folder} diff ${baseCommit}...HEAD\`.`
+		)
+		.join('\n');
+	return [
+		`Review these ${pulls.length} related pull requests together. They belong to one piece of work, split up or stacked to be easier to review, and may be in different repositories. Each one's working copy is checked out at its head in its own folder here:\n${prs}`,
+		...(focus ? [`The person asking adds: ${focus}`] : []),
+		'Read each diff and whatever surrounding code you need. You may run read-only commands and the tests. Do not change any files: this is a review.',
+		'Review each pull request on its own, and the set as a whole: whether they fit together (the order they must merge in, interfaces and contracts between them, versions), whether anything is missing, duplicated or in the wrong one, and whether each still works if merged without the others.',
+		`Rate each pull request, and the set as a whole, from 1 (poor) to 5 (excellent) on each of these attributes:\n${list}`,
+		'Explain each score briefly and concretely. If an attribute does not apply, give it 5 and say why.',
+		COMMENT_RULES +
+			' Comments belong to the pull request whose files they are on; paths are relative to that repository, without the folder.',
+		JSON_RULE,
+		`Shape: {${SCORES_SHAPE} (the set as a whole), "summary": "how the pull requests fit together, in a few sentences", "verdict": "approve" | "comment" | "request_changes", "pullRequests": [{"url": "<its link exactly as listed>", ${SCORES_SHAPE}, "summary": "...", "verdict": "...", "comments": [${COMMENT_SHAPE}]}] (one per pull request, in the order listed)}`
 	].join('\n\n');
 }
 
@@ -97,25 +155,25 @@ export function extractJson(text: string): unknown {
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 const strList = (v: unknown) => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
 
-/** Read and check the agent's review: one score per requested attribute, 1–5. */
-export function parseReview(text: string, attributes: ReviewAttribute[]): ReviewResult {
-	const data = extractJson(text) as { scores?: unknown; summary?: unknown; verdict?: unknown };
-	const given = Array.isArray(data.scores) ? (data.scores as Record<string, unknown>[]) : [];
-	const scores = attributes.map((attribute) => {
+/** One score per requested attribute, 1–5; `of` names what was rated, for errors. */
+function parseScores(
+	raw: unknown,
+	attributes: ReviewAttribute[],
+	of = 'The review'
+): ReviewScore[] {
+	const given = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
+	return attributes.map((attribute) => {
 		const match = given.find(
-			(s) => str(s.attribute).toLowerCase() === attribute.name.toLowerCase()
+			(s) => str(s?.attribute).toLowerCase() === attribute.name.toLowerCase()
 		);
 		if (!match) {
-			throw new EngineError(
-				'unreadable_result',
-				`The review has no score for "${attribute.name}".`
-			);
+			throw new EngineError('unreadable_result', `${of} has no score for "${attribute.name}".`);
 		}
 		const score = Math.round(Number(match.score));
 		if (!Number.isFinite(score)) {
 			throw new EngineError(
 				'unreadable_result',
-				`The score for "${attribute.name}" is not a number.`
+				`${of}: the score for "${attribute.name}" is not a number.`
 			);
 		}
 		return {
@@ -124,10 +182,111 @@ export function parseReview(text: string, attributes: ReviewAttribute[]): Review
 			explanation: str(match.explanation)
 		};
 	});
-	const verdict = ['approve', 'comment', 'request_changes'].includes(str(data.verdict))
-		? (str(data.verdict) as ReviewResult['verdict'])
+}
+
+const parseVerdict = (v: unknown): ReviewVerdict =>
+	['approve', 'comment', 'request_changes'].includes(str(v))
+		? (str(v) as ReviewVerdict)
 		: 'comment';
-	return { scores, summary: str(data.summary), verdict, postedUrl: null };
+
+const positiveInt = (v: unknown) => {
+	const n = Number(v);
+	return Number.isInteger(n) && n >= 1 ? n : null;
+};
+
+/**
+ * The agent's inline comments, checked: a relative path inside the repository, sensible lines,
+ * and something to say. Broken ones are left out rather than failing the review. The lines'
+ * text and whether they're in the diff are filled in later, from the working copy.
+ */
+export function parseComments(raw: unknown): ReviewComment[] {
+	if (!Array.isArray(raw)) return [];
+	const comments: ReviewComment[] = [];
+	for (const item of raw as Record<string, unknown>[]) {
+		const path = str(item?.path)
+			.replace(/\\/g, '/')
+			.replace(/^(\.\/)+/, '');
+		if (!path || path.startsWith('/') || path.split('/').includes('..')) continue;
+		const line = positiveInt(item.line);
+		if (!line) continue;
+		const startLine = Math.min(positiveInt(item.startLine) ?? line, line);
+		const suggestion =
+			typeof item.suggestion === 'string' ? item.suggestion.replace(/\n$/, '') : null;
+		const body = str(item.body);
+		if (!body && suggestion === null) continue;
+		comments.push({ path, startLine, line, body, suggestion, original: null, inDiff: false });
+		if (comments.length === MAX_COMMENTS) break;
+	}
+	return comments;
+}
+
+/** Read and check the agent's review of one pull request: one score per attribute, 1–5. */
+export function parseReview(text: string, attributes: ReviewAttribute[]): ReviewResult {
+	const data = extractJson(text) as Record<string, unknown>;
+	return {
+		scores: parseScores(data.scores, attributes),
+		summary: str(data.summary),
+		verdict: parseVerdict(data.verdict),
+		postedUrl: null,
+		comments: parseComments(data.comments)
+	};
+}
+
+/**
+ * Read and check the agent's review of several pull requests: the set as a whole, and one review
+ * per pull request, matched by link (or else by position).
+ */
+export function parseMultiReview(
+	text: string,
+	attributes: ReviewAttribute[],
+	pulls: ReviewedPullRequest[]
+): ReviewResult {
+	const data = extractJson(text) as Record<string, unknown>;
+	const given = Array.isArray(data.pullRequests)
+		? (data.pullRequests as Record<string, unknown>[])
+		: [];
+	// By link first, then by number, then whatever is left, in order.
+	const matched = new Map<ReviewedPullRequest, Record<string, unknown>>();
+	const free = new Set(given);
+	const claim = (find: (pr: ReviewedPullRequest) => Record<string, unknown> | undefined) => {
+		for (const pr of pulls) {
+			if (matched.has(pr)) continue;
+			const entry = find(pr);
+			if (entry) {
+				matched.set(pr, entry);
+				free.delete(entry);
+			}
+		}
+	};
+	claim((pr) => [...free].find((g) => str(g?.url) === pr.url));
+	claim((pr) => [...free].find((g) => !str(g?.url) && Number(g?.number) === pr.number));
+	// A link the agent got wrong still counts by its place.
+	claim(() => [...free][0]);
+	const pullRequests: PullRequestReview[] = pulls.map((pr) => {
+		const entry = matched.get(pr);
+		if (!entry) {
+			throw new EngineError('unreadable_result', `The review has nothing on ${pr.url}.`);
+		}
+		return {
+			url: pr.url,
+			number: pr.number,
+			title: pr.title,
+			provider: pr.provider,
+			scores: parseScores(entry.scores, attributes, `The review of #${pr.number}`),
+			summary: str(entry.summary),
+			verdict: parseVerdict(entry.verdict),
+			comments: parseComments(entry.comments),
+			headSha: null,
+			postedUrl: null
+		};
+	});
+	return {
+		scores: parseScores(data.scores, attributes, 'The review of the set'),
+		summary: str(data.summary),
+		verdict: parseVerdict(data.verdict),
+		postedUrl: null,
+		pullRequests
+	};
 }
 
 /** Read and check the agent's exploration: 1–4 approaches and a recommendation. */
@@ -155,8 +314,48 @@ export function parseExploration(text: string): Exploration {
 
 const verdictLabel = { approve: 'Approve', comment: 'Comment', request_changes: 'Request changes' };
 
-/** The review as a Markdown comment for GitHub or GitLab. */
-export function reviewMarkdown(review: ReviewResult): string {
+/** A fence longer than any run of backticks in `code`, so the code can't close it. */
+function fence(code: string) {
+	const longest = Math.max(2, ...[...code.matchAll(/`+/g)].map((m) => m[0].length));
+	return '`'.repeat(longest + 1);
+}
+
+const lines = (c: ReviewComment) =>
+	c.startLine === c.line ? `line ${c.line}` : `lines ${c.startLine}–${c.line}`;
+
+/**
+ * An inline comment's text: the remark, then the suggestion in the provider's syntax. GitHub
+ * replaces the commented range; GitLab counts the lines above the commented one.
+ */
+export function inlineCommentMarkdown(c: ReviewComment, provider: 'github' | 'gitlab'): string {
+	if (c.suggestion === null) return c.body;
+	const f = fence(c.suggestion);
+	const tag = provider === 'gitlab' ? `suggestion:-${c.line - c.startLine}+0` : 'suggestion';
+	return [c.body, `${f}${tag}\n${c.suggestion}\n${f}`].filter(Boolean).join('\n\n');
+}
+
+/** Comments that couldn't go inline, for the review's main comment. */
+function commentsSection(comments: ReviewComment[]): string {
+	if (comments.length === 0) return '';
+	return [
+		'#### Comments',
+		...comments.map((c) => {
+			const head = `**\`${c.path}\`**, ${lines(c)}${c.body ? `: ${c.body}` : ''}`;
+			if (c.suggestion === null) return head;
+			const f = fence(c.suggestion);
+			return `${head}\n\nSuggested:\n\n${f}\n${c.suggestion}\n${f}`;
+		})
+	].join('\n\n');
+}
+
+/**
+ * The review as a Markdown comment for GitHub or GitLab. `notInline` are the comments that
+ * couldn't be posted on their lines; `together` names the other pull requests of a set.
+ */
+export function reviewMarkdown(
+	review: Pick<ReviewResult, 'scores' | 'summary' | 'verdict'>,
+	opts: { notInline?: ReviewComment[]; together?: { set: string; others: string[] } } = {}
+): string {
 	const rows = review.scores
 		.map(
 			(s) =>
@@ -165,8 +364,11 @@ export function reviewMarkdown(review: ReviewResult): string {
 		.join('\n');
 	return [
 		`### Review: ${verdictLabel[review.verdict]}`,
+		opts.together &&
+			`Reviewed together with ${opts.together.others.join(', ')}. ${opts.together.set}`.trim(),
 		review.summary,
 		'| Attribute | Score | Notes |\n| --- | --- | --- |\n' + rows,
+		commentsSection(opts.notInline ?? []),
 		'_Reviewed with Patchwork._'
 	]
 		.filter(Boolean)

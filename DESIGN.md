@@ -26,7 +26,9 @@ are in [README.md](README.md).
 Two read-only workflows sit next to it:
 
 - **Review PR.** Rate any pull request or merge request on chosen attributes (1–5, each with an
-  explanation), then optionally post the report as a comment.
+  explanation) with suggested changes on its lines, then optionally post the report as a
+  review, the suggestions inline. Related pull requests (a split change, even across
+  repositories) can be reviewed together.
 - **Explore.** Compare approaches to an idea before building one.
 
 Nothing is pushed until you approve it.
@@ -673,6 +675,24 @@ electron:sandbox`.
   - New engine methods: `listPullRequests`, `startReview` (by link or by repository and number),
     `postReview` (a GitHub review comment or a GitLab note) and `startExplore`. Default
     attributes live in `settings.reviewAttributes`.
+  - Inline suggestions: the agent adds `comments` (path, `startLine`–`line` in the PR's version,
+    body, optional replacement). The engine checks them (`parseComments`: relative paths only,
+    at most 15) and, before the copy goes, reads the lines from the reviewed commit
+    (`original`) and checks they're inside a hunk of the PR's diff (`inDiff`, from
+    `review-comments.ts`), since only those can be commented on. `postReview` sends one review:
+    on GitHub a review with `comments` (`suggestion` blocks, `commit_id` = the reviewed head),
+    posted again without them if GitHub refuses (422); on GitLab a discussion per comment
+    (`suggestion:-N+0`, positioned with the MR's `diff_refs`, only when its head is the reviewed
+    one), then the note. Whatever doesn't go inline is listed in the main comment.
+  - Several pull requests (`startReview({ pullRequests })`, up to 6, any repositories, the same
+    one twice counts once): one task, in the first one's repository, with `run.pullRequests`.
+    Its working copy is a folder with one read-only worktree per pull request
+    (`<repo>-<number>`, `task.workingCopies` for cleanup), and one agent reviews each and the
+    set (`multiReviewPrompt`: order, interfaces, gaps and duplicates across the split). The
+    answer (`parseMultiReview`) is the set's scores, summary and verdict, plus
+    `review.pullRequests`, matched by link, then number, then position. Each is posted to its
+    own repository on its own (`postReview({ taskId, url })`), saying which others it was
+    reviewed with; an unchanged one keeps its posted link after a follow-up.
   - UI:
     - a "Workflows" sidebar group;
     - Review PR and Explore pages;

@@ -13,6 +13,8 @@ export interface FakeMergeRequest {
 	state: 'opened' | 'closed' | 'merged';
 	draft: boolean;
 	web_url: string;
+	/** The commits its diff is between; set by a test that posts comments on lines. */
+	diff_refs?: { base_sha: string; start_sha: string; head_sha: string } | null;
 }
 
 export interface FakeGitLab {
@@ -21,6 +23,13 @@ export interface FakeGitLab {
 	mergeRequests: FakeMergeRequest[];
 	/** Comments posted on merge requests (reviews). */
 	notes: { project: string; iid: number; id: number; body: string }[];
+	/** Comments posted on lines of merge requests' diffs. */
+	discussions: {
+		project: string;
+		iid: number;
+		body: string;
+		position: { new_path: string; new_line: number; head_sha: string };
+	}[];
 	setState: (project: string, iid: number, state: FakeMergeRequest['state']) => void;
 	close: () => Promise<void>;
 }
@@ -33,14 +42,16 @@ const send = (res: ServerResponse, status: number, body: unknown) => {
 export async function startFakeGitLab(): Promise<FakeGitLab> {
 	const mergeRequests: FakeMergeRequest[] = [];
 	const notes: FakeGitLab['notes'] = [];
+	const discussions: FakeGitLab['discussions'] = [];
 	let base = '';
 
 	const server = createServer(async (req, res) => {
 		const url = new URL(req.url ?? '/', 'http://localhost');
 		// /api/v4/projects/:encodedPath/merge_requests[/:iid]
-		const match = /^\/api\/v4\/projects\/([^/]+)\/merge_requests(?:\/(\d+))?(\/notes)?$/.exec(
-			url.pathname
-		);
+		const match =
+			/^\/api\/v4\/projects\/([^/]+)\/merge_requests(?:\/(\d+))?(\/notes|\/discussions)?$/.exec(
+				url.pathname
+			);
 		if (!match) return send(res, 404, { message: '404 Not Found' });
 		if (!req.headers['private-token']) return send(res, 401, { message: '401 Unauthorized' });
 		const project = decodeURIComponent(match[1]);
@@ -51,6 +62,15 @@ export async function startFakeGitLab(): Promise<FakeGitLab> {
 			if (!mr) return send(res, 404, { message: '404 Not found' });
 			let raw = '';
 			for await (const chunk of req) raw += chunk;
+			if (match[3] === '/discussions') {
+				const input = JSON.parse(raw || '{}');
+				// Like GitLab: a line comment must be on the merge request's current diff.
+				if (!mr.diff_refs || input.position?.head_sha !== mr.diff_refs.head_sha) {
+					return send(res, 400, { message: '400 Bad request - Note line code is invalid' });
+				}
+				discussions.push({ project, iid: mr.iid, body: input.body, position: input.position });
+				return send(res, 201, { id: `d${discussions.length}` });
+			}
 			const note = {
 				project,
 				iid: mr.iid,
@@ -122,6 +142,7 @@ export async function startFakeGitLab(): Promise<FakeGitLab> {
 		apiUrl: `${base}/api/v4`,
 		mergeRequests,
 		notes,
+		discussions,
 		setState(project, iid, state) {
 			const mr = mergeRequests.find((m) => m.project === project && m.iid === iid);
 			if (mr) mr.state = state;

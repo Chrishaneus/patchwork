@@ -5,6 +5,7 @@ import {
 	type EngineErrorData,
 	type LogEntry,
 	type PublishInput,
+	type PullRequestToReview,
 	type Repository,
 	type ReviewAttribute,
 	type ReviewedPullRequest,
@@ -25,7 +26,7 @@ import { performChecks } from './checks.js';
 import { executeCodeTask, switchPrompt } from './code-task.js';
 import { createRunContext, newTask, type RunServiceDeps } from './context.js';
 import { publishTask, postReview, syncPullRequests } from './publishing.js';
-import { findPullRequestToReview, listPullRequests } from './pull-requests.js';
+import { findPullRequestsToReview, listPullRequests } from './pull-requests.js';
 import { createTaskQueue, startTimeLimit, type TaskHandle } from './queue.js';
 import { dropWorkingCopy, executeReadOnlyTask } from './read-only-task.js';
 import { recoverInterrupted } from './recovery.js';
@@ -109,6 +110,7 @@ export function createRunService(deps: RunServiceDeps) {
 		instruction: string;
 		repos: Repository[];
 		pullRequest?: ReviewedPullRequest;
+		pullRequests?: ReviewedPullRequest[];
 		attributes?: ReviewAttribute[];
 		focus?: string;
 		branch: (repo: Repository) => string;
@@ -130,6 +132,7 @@ export function createRunService(deps: RunServiceDeps) {
 				})
 			),
 			...(input.pullRequest ? { pullRequest: input.pullRequest } : {}),
+			...(input.pullRequests ? { pullRequests: input.pullRequests } : {}),
 			...(input.attributes ? { attributes: input.attributes } : {}),
 			...(input.focus ? { focus: input.focus } : {})
 		});
@@ -344,18 +347,30 @@ export function createRunService(deps: RunServiceDeps) {
 			url?: string;
 			repositoryId?: string;
 			number?: number;
+			pullRequests?: PullRequestToReview[];
 			attributes: ReviewAttribute[];
 			instruction?: string;
 		}): Promise<Run> {
 			const attributes = cleanAttributes(input.attributes);
-			const { repo, pullRequest } = await findPullRequestToReview(ctx, input);
+			const found = await findPullRequestsToReview(
+				ctx,
+				input.pullRequests?.length ? input.pullRequests : [input]
+			);
+			const [{ repo, pullRequest }] = found;
+			const several = found.length > 1;
 			return queueReadOnlyRun({
 				kind: 'review',
-				instruction: input.instruction?.trim() || pullRequest.title,
-				// Whatever you wrote besides the link is for the agent.
+				instruction:
+					input.instruction?.trim() ||
+					(several
+						? found.map((f) => `#${f.pullRequest.number} ${f.pullRequest.title}`).join(', ')
+						: pullRequest.title),
+				// Whatever you wrote besides the links is for the agent.
 				focus: reviewFocus(input.instruction),
+				// One task, in the first pull request's repository, even when they span several.
 				repos: [repo],
 				pullRequest,
+				...(several ? { pullRequests: found.map((f) => f.pullRequest) } : {}),
 				attributes,
 				branch: () => pullRequest.headRef,
 				baseBranch: () => pullRequest.baseRef
@@ -393,7 +408,7 @@ export function createRunService(deps: RunServiceDeps) {
 			});
 		},
 
-		postReview: (taskId: string) => postReview(ctx, taskId),
+		postReview: (taskId: string, url?: string) => postReview(ctx, taskId, url),
 
 		/** Change how many tasks run at once; queued tasks start right away if there's room. */
 		setConcurrency: (value: number) => queue.setConcurrency(value),

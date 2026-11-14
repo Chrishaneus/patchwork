@@ -9,21 +9,25 @@ import path from 'node:path';
 test.describe.configure({ mode: 'serial' });
 const FAKE_GITHUB = 'http://127.0.0.1:4011';
 
-/** Push a `feature` branch to acme/gh-review and open a pull request for it. */
-async function openPullRequest(request: import('@playwright/test').APIRequestContext) {
+/** Push a branch (`feature` adding feature.txt) to acme/gh-review and open a pull request for it. */
+async function openPullRequest(
+	request: import('@playwright/test').APIRequestContext,
+	branch = 'feature',
+	title = 'Add a feature'
+) {
 	const bare = path.resolve('.e2e/gh-review.git');
 	const work = mkdtempSync(path.join(tmpdir(), 'e2e-feature-'));
 	const git = (...args: string[]) => execFileSync('git', args, { cwd: work });
 	git('clone', '-q', bare, '.');
-	git('switch', '-q', '-c', 'feature');
-	writeFileSync(path.join(work, 'feature.txt'), 'A new feature\n');
+	git('switch', '-q', '-c', branch);
+	writeFileSync(path.join(work, `${branch}.txt`), `A new ${branch}\n`);
 	git('add', '.');
 	git('-c', 'user.email=dev@example.com', '-c', 'user.name=Dev', 'commit', '-q', '-m', 'Feature');
-	git('push', '-q', 'origin', 'feature');
+	git('push', '-q', 'origin', branch);
 	rmSync(work, { recursive: true, force: true });
 	const res = await request.post(`${FAKE_GITHUB}/repos/acme/gh-review/pulls`, {
 		headers: { authorization: 'Bearer e2e-token' },
-		data: { title: 'Add a feature', head: 'feature', base: 'main' }
+		data: { title, head: branch, base: 'main' }
 	});
 	expect(res.status()).toBe(201);
 	return ((await res.json()) as { html_url: string; number: number }).number;
@@ -108,6 +112,42 @@ test('reviews a pull request in the Agent, posts it and answers a question', asy
 	await expect(
 		page.getByTestId('run').filter({ hasText: 'focus on naming' }).first()
 	).toContainText('Review');
+});
+
+test('reviews the parts of a split change together, with suggestions, and posts each', async ({
+	page,
+	request
+}) => {
+	const first = await openPullRequest(request, 'split-models', 'Split: models');
+	const second = await openPullRequest(request, 'split-views', 'Split: views');
+	const link = (n: number) => `https://github.com/acme/gh-review/pull/${n}`;
+
+	await page.goto('/agent');
+	await page
+		.getByRole('textbox', { name: 'Message' })
+		.fill(`review ${link(first)} and ${link(second)} together`);
+	const panel = page.getByTestId('agent-review-panel');
+	await expect(panel).toContainText(`Reviewing ${link(first)}`);
+	await expect(panel).toContainText(`Reviewing ${link(second)}`);
+	await page.getByRole('button', { name: 'Send' }).click();
+
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Review: 2 pull requests');
+	await expect(page.getByTestId('agent-task')).toHaveAttribute('data-task-status', 'completed');
+	const report = page.getByTestId('agent-thread').getByTestId('review-report');
+	await expect(report.getByTestId('review-set')).toHaveText('2 pull requests reviewed together');
+	const cards = report.getByTestId('review-pull-request');
+	await expect(cards).toHaveCount(2);
+	// Each part has its own suggestion: its new file's first line, in capitals.
+	await expect(cards.nth(0)).toContainText('Split: models');
+	await expect(cards.nth(0).getByTestId('review-comment')).toContainText('split-models.txt');
+	await expect(cards.nth(0).getByTestId('review-comment')).toContainText('+ A NEW SPLIT-MODELS');
+	await expect(cards.nth(1).getByTestId('review-comment')).toContainText('split-views.txt');
+
+	await report.getByRole('button', { name: 'Post all' }).click();
+	for (const i of [0, 1]) {
+		await expect(cards.nth(i).getByRole('link', { name: 'View posted review' })).toBeVisible();
+	}
+	await expect(report.getByRole('button', { name: 'Post all' })).toHaveCount(0);
 });
 
 test('explores in the Agent and builds an approach', async ({ page }) => {

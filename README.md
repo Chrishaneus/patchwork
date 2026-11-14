@@ -136,8 +136,18 @@ Click a mode to set it yourself; it stays until you pick Auto again. The modes:
     and verdict, shown as a card in the conversation.
   - The defaults are Correctness, Security, Minimalism, Readability, Tests and Performance. Edit
     them under **Settings → Reviews**, and add your own on each review.
-  - **Post to GitHub/GitLab** posts the report as a review comment. It needs the same token as
+  - The agent also suggests changes on specific lines: each shows the lines as they are and what
+    they should become.
+  - **Post to GitHub/GitLab** posts the report as a review, with the suggestions as comments on
+    their lines (GitHub and GitLab show **Apply suggestion** on them). Suggestions on lines the
+    pull request doesn't change go in the review's main comment. It needs the same token as
     publishing.
+  - **Several related pull requests**, such as a change split up to be easier to review or a
+    backend and a frontend part, can be reviewed together, even from different repositories
+    (up to 6): paste several links, or pick one and **Add another pull request**. One agent sees
+    all of them: each gets its own scores, summary and suggestions, and the set gets an
+    assessment of how the parts fit together. Post them one at a time, or **Post all**; each
+    pull request's review names the others.
 - **Explore:** pick repositories and describe what you want to build. The agent compares 2–4
   approaches: files touched, pros and cons, effort, and a recommendation.
   - **Build this approach** starts a change with that approach, in a new conversation.
