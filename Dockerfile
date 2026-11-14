@@ -6,6 +6,8 @@ WORKDIR /app
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY package.json package-lock.json .npmrc ./
+# npm ci runs the postinstall check for the sandbox tools.
+COPY dev/check-sandbox-tools.mjs dev/
 RUN npm ci
 COPY . .
 RUN npm run build && npm run server:build
