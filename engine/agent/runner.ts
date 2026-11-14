@@ -14,6 +14,18 @@ export function sandboxGuidance(canAsk: boolean) {
 	].join('\n');
 }
 
+/**
+ * How a change's last message is written: the pull request's title and description, which the
+ * app reads (`splitTitle` in runs/code-task.ts) and offers when publishing.
+ */
+export const PULL_REQUEST_FORMAT = [
+	'Your last message is the pull request for your change, and nothing else. Its first line is "Title: " and the',
+	'title: what the change does, under 72 characters, in the style of the repository’s recent commit subjects',
+	'(see `git log --format=%s -15`). Then a blank line and the description in Markdown, written for the reviewer',
+	'rather than as a reply to the user: what changed and why, and how you checked it. No signature or',
+	'"generated with" footer.'
+].join('\n');
+
 const LONG_COMMANDS = [
 	'Commands such as installs, builds and test runs can take several minutes and print nothing for',
 	'a long time. Wait for them to finish instead of stopping or restarting them.'
@@ -67,8 +79,7 @@ export function guidance(input: AgentRunInput) {
 		'Make the change the user asks for, following the conventions already used in the repository.',
 		'Run the project’s existing checks or tests when that is practical, and fix what your change breaks.',
 		'Do not commit, push, or open pull requests: the app does that after a person reviews your work.',
-		'End with a short Markdown summary of what you changed and why. It becomes the pull request description,',
-		'so do not add a signature or "generated with" footer to it.',
+		PULL_REQUEST_FORMAT,
 		LONG_COMMANDS
 	].join('\n');
 }

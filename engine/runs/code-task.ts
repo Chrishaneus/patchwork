@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { PULL_REQUEST_FORMAT } from '../agent/runner.js';
 import type { Repository, Run, Task } from '#lib/engine/contract.js';
 import { collectDiff, createWorktree } from '../git/worktrees.js';
 import { performChecks } from './checks.js';
@@ -19,9 +20,34 @@ export function followUpPrompt(instruction: string, task: Task, followUp: string
 	}
 	parts.push(`Now do this as well:\n\n${followUp}`);
 	parts.push(
-		'When you finish, summarize the complete change, including the earlier work: the summary becomes the pull request description.'
+		'When you finish, write the pull request again for the complete change, the earlier work included.'
 	);
 	return parts.join('\n\n');
+}
+
+/**
+ * The agent's last message as a pull request: the title from its `Title:` line, and the rest
+ * after it as the description. Without one, there's no title and the whole message is the
+ * description, as before.
+ */
+export function splitTitle(message: string): { title: string | null; body: string } {
+	const lines = message.split('\n');
+	// "Title:", "**Title:**" or "**Title**:", with the colon: "Title bar now hides" is no title.
+	const label = /^\s*(?:\*\*)?title(?:\*\*)?:(?:\*\*)?\s*/i;
+	const at = lines.findIndex((line) => label.test(line));
+	if (at === -1) return { title: null, body: message.trim() };
+	const title = lines[at]
+		.replace(label, '')
+		.replace(/^[`"'*]+|[`"'*]+$/g, '')
+		.trim()
+		.slice(0, 120);
+	return {
+		title: title || null,
+		body: lines
+			.slice(at + 1)
+			.join('\n')
+			.trim()
+	};
 }
 
 /**
@@ -46,6 +72,7 @@ export function switchPrompt(run: Run, task: Task, change: string): string {
 		parts.push(`Your latest answer was:\n\n${task.summary}`);
 	}
 	parts.push(`Now make this change in this working copy; you can edit files now:\n\n${change}`);
+	parts.push(PULL_REQUEST_FORMAT);
 	return parts.join('\n\n');
 }
 
@@ -115,8 +142,11 @@ export async function executeCodeTask(
 	});
 	if (signal.aborted) throw signal.reason;
 	const before = await ctx.findTask(taskId);
+	const { title, body } = splitTitle(result.summary);
 	await ctx.updateTask(taskId, {
-		summary: result.summary,
+		// The description, without the title line; the title is offered when publishing.
+		summary: body || result.summary,
+		title,
 		// Follow-ups (and the conversation before a switch) add to the earlier cost and turns.
 		costUsd: followUp || switched ? addUsage(before.costUsd, result.costUsd) : result.costUsd,
 		turns: followUp || switched ? addUsage(before.turns, result.turns) : result.turns

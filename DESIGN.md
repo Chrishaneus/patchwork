@@ -412,7 +412,11 @@ Built in M2 ([`engine/agent/claude/`](engine/agent/claude/index.ts)). Each agent
 - **Prompt:**
   - Your instruction, plus the repository and branch.
   - Asks the agent to follow the repository's conventions and run its checks, not to commit or
-    push, and to end with a Markdown summary, which becomes the PR description.
+    push, and to end with the pull request (`PULL_REQUEST_FORMAT` in `agent/runner.ts`): a
+    `Title:` line in the style of the repository's recent commit subjects, then the
+    description, written for the reviewer. `splitTitle` (in `runs/code-task.ts`) saves the title
+    as `task.title` and the rest as the summary; a message without one is all summary, as
+    before. Follow-ups and switched questions ask for it again, for the whole change.
 - **Log:** each tool call becomes one short line (`$ npm test`, `Edit src/a.ts`), and the agent's
   text is shown as written. The task records cost and number of turns from the SDK's result.
 - **Credentials:**
@@ -599,8 +603,8 @@ shadcn-svelte.
     - retry after failures, and the diff kept after cleanup;
     - token-based HTTPS push.
   - UI:
-    - the "Open pull request" dialog: title from the instruction, description from the
-      summary, a draft option;
+    - the "Open pull request" dialog: the agent's title (else the instruction's first line),
+      description from the summary, a draft option;
     - the PR link and publish errors on the task card;
     - the GitHub token in Settings;
     - the open-PR count on the dashboard.

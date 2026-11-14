@@ -26,7 +26,7 @@
 		runs: RunsState;
 	} = $props();
 
-	/** First line of the instruction, kept to a typical commit-subject length. */
+	/** First line of the instruction, kept to a typical commit-subject length: the fallback title. */
 	function defaultTitle(text: string) {
 		const line = text.trim().split('\n')[0];
 		return line.length > 72 ? `${line.slice(0, 71)}…` : line;
@@ -40,7 +40,8 @@
 	const actionError = $derived(runs.actionErrors[task.id]);
 
 	function reset() {
-		title = defaultTitle(instruction);
+		// The agent's title when it gave one, else the start of what was asked.
+		title = task.title || defaultTitle(instruction);
 		body = task.summary ?? '';
 		draft = false;
 	}

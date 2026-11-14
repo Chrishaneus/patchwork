@@ -212,6 +212,8 @@ export interface Task {
 	finishedAt: string | null;
 	/** The agent's final message, used later as the PR description. */
 	summary: string | null;
+	/** The pull request title the agent suggested (code tasks; missing before it could). */
+	title?: string | null;
 	error: EngineErrorData | null;
 	costUsd: number | null;
 	turns: number | null;

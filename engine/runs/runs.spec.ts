@@ -145,6 +145,23 @@ describe('runs', () => {
 		}
 	});
 
+	it('takes the pull request title from the agent’s last message', async () => {
+		const { engine, repo } = await setup(async (input) => {
+			await editingAgent(input);
+			return {
+				summary: 'Title: Add hello.txt\n\nAdds hello.txt and expands the README.',
+				costUsd: null,
+				turns: null
+			};
+		});
+		const { tasks } = await engine.startRun({ repositoryIds: [repo.id], instruction: 'x' });
+		const task = await waitForStatus(engine, tasks[0].id, ['awaiting_review', 'failed']);
+		expect(task).toMatchObject({
+			title: 'Add hello.txt',
+			summary: 'Adds hello.txt and expands the README.'
+		});
+	});
+
 	it('validates the request before starting', async () => {
 		const { engine, repo, repoDir } = await setup(editingAgent);
 		git(repoDir, 'branch', 'taken');
