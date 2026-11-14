@@ -199,6 +199,23 @@ describe('sandboxPolicy', () => {
 		expect(sandboxPolicy({ cwd, protectedFiles: [] }).writable).toEqual([cwd]);
 	});
 
+	it('allows writes in the shared folder and each working copy’s git data, across repositories', () => {
+		const workspace = dirs.make('patchwork-run-');
+		const gitDirs = ['api', 'webapp'].map((name) => {
+			const gitDir = path.join(dirs.make('patchwork-repo-'), '.git', 'worktrees', name);
+			mkdirSync(gitDir, { recursive: true });
+			mkdirSync(path.join(workspace, name));
+			writeFileSync(path.join(workspace, name, '.git'), `gitdir: ${gitDir}\n`);
+			return gitDir;
+		});
+		const policy = sandboxPolicy({
+			cwd: workspace,
+			protectedFiles: [],
+			workingCopies: ['api', 'webapp'].map((name) => path.join(workspace, name))
+		});
+		expect(policy.writable).toEqual([workspace, ...gitDirs]);
+	});
+
 	it('allows no writes at all for read-only workflows', () => {
 		const cwd = dirs.make();
 		expect(sandboxPolicy({ cwd, protectedFiles: [], readOnly: true }).writable).toEqual([]);

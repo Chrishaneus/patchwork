@@ -225,10 +225,16 @@ export function sandboxPolicy(opts: {
 	cwd: string;
 	protectedFiles: string[];
 	readOnly?: boolean;
+	/**
+	 * Working copies inside `cwd` when the agent works on several repositories at once; each one's
+	 * git folder (outside `cwd`) must be writable too. Default: `cwd` is the one working copy.
+	 */
+	workingCopies?: string[];
 }): SandboxPolicy {
-	const gitDir = worktreeGitDir(opts.cwd);
+	const copies = opts.workingCopies?.length ? opts.workingCopies : [opts.cwd];
+	const gitDirs = copies.flatMap((copy) => worktreeGitDir(copy) ?? []);
 	return {
-		writable: opts.readOnly ? [] : gitDir ? [opts.cwd, gitDir] : [opts.cwd],
+		writable: opts.readOnly ? [] : [opts.cwd, ...gitDirs],
 		allowedDomains: PACKAGE_REGISTRIES,
 		deniedFiles: [
 			...credentialFiles(),

@@ -86,6 +86,58 @@ test('talks to the agent about a change in one repository', async ({ page }) => 
 	await expect(page.getByTestId('task')).toContainText('Ready for review');
 });
 
+test('makes one change across repositories with one agent, and a pull request in each', async ({
+	page
+}) => {
+	const stamp = Date.now();
+	const names = [`api-${stamp}`, `webapp-${stamp}`];
+	await addRepos(page, names);
+
+	await page.goto('/agent');
+	for (const name of names) await pick(page, name);
+	// Together is the default for several repositories.
+	await expect(page.getByTestId('change-split')).toHaveAttribute('data-split', 'together');
+	const start = page.getByRole('textbox', { name: 'Message' });
+	await start.fill('Add OAuth2 login');
+	await start.press('Enter');
+
+	await expect(page.getByTestId('agent-together')).toContainText('One agent across 2 repositories');
+	const tasks = page.getByTestId('agent-task');
+	for (const name of names) {
+		await expect(tasks.filter({ hasText: name })).toHaveAttribute(
+			'data-task-status',
+			'awaiting_review'
+		);
+	}
+	const thread = page.getByTestId('agent-thread');
+	// One agent: it started once, and wrote in both working copies.
+	await expect(thread.getByText('Agent started with test-agent')).toHaveCount(1);
+	for (const name of names) await expect(thread).toContainText(`Write ${name}/CHANGELOG.md`);
+
+	const reply = page.getByRole('textbox', { name: 'Reply to the agent…' });
+	await reply.fill('Add logout too');
+	await reply.press('Enter');
+	const sent = thread.locator('[data-kind="user"]', { hasText: 'Add logout too' });
+	await expect(sent).toHaveCount(1);
+	for (const name of names) await expect(sent).toContainText(name);
+	await expect(thread.getByText('Agent started with test-agent')).toHaveCount(2);
+	for (const name of names) {
+		await expect(tasks.filter({ hasText: name })).toHaveAttribute(
+			'data-task-status',
+			'awaiting_review'
+		);
+	}
+
+	// Each repository has its own pull request description, from the agent's last message.
+	await page.getByRole('link', { name: 'Review & publish' }).click();
+	// In the order they were picked (the webapp's log names the API, so text alone can't tell).
+	for (const [i, name] of names.entries()) {
+		const card = page.getByTestId('task').nth(i);
+		await card.getByRole('tab', { name: 'Summary' }).click();
+		await expect(card).toContainText(`Added a changelog entry to ${name}`);
+	}
+});
+
 test('sends a reply to all repositories, and shows each one on its own', async ({ page }) => {
 	const stamp = Date.now();
 	const names = [`left-${stamp}`, `right-${stamp}`];
@@ -93,6 +145,7 @@ test('sends a reply to all repositories, and shows each one on its own', async (
 
 	await page.goto('/agent');
 	for (const name of names) await pick(page, name);
+	await page.getByTestId('change-split').getByRole('radio', { name: 'Separately' }).click();
 	const start = page.getByRole('textbox', { name: 'Message' });
 	await start.fill('Add a changelog everywhere');
 	await start.press('Enter');

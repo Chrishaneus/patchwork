@@ -231,7 +231,8 @@ export function createGeminiAgentRunner(
 		const policy = sandboxPolicy({
 			cwd: input.cwd,
 			protectedFiles: opts.protectedFiles ?? [],
-			readOnly
+			readOnly,
+			workingCopies: input.workingCopies?.map((c) => c.path)
 		});
 		// A fresh home for Gemini's own state (sessions, caches) and settings, so it never reads
 		// the user's ~/.gemini (logins, extensions, MCP servers).

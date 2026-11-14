@@ -392,6 +392,11 @@ export interface Run {
 	tasks: Task[];
 	/** Runs made before workflows existed are code runs. */
 	kind?: RunKind;
+	/**
+	 * Code runs over several repositories: one agent makes the change across all of them, in a
+	 * session the first task runs. Without it, each repository has an agent of its own.
+	 */
+	together?: boolean;
 	/** Review runs: the pull request under review (the first one, when there are several). */
 	pullRequest?: ReviewedPullRequest;
 	/** Review runs of several related pull requests, possibly in different repositories. */
@@ -614,7 +619,16 @@ export interface EngineApi {
 	listGitHubRepositories(input: Record<string, never>): Promise<GitHubRepository[]>;
 
 	/** Start a run. Returns at once; progress arrives as `EngineEvent`s. */
-	startRun(input: { repositoryIds: string[]; instruction: string; branch?: string }): Promise<Run>;
+	/**
+	 * A change in one or more repositories. Several are one change by one agent working across them,
+	 * unless `separately`: then each gets an agent of its own.
+	 */
+	startRun(input: {
+		repositoryIds: string[];
+		instruction: string;
+		branch?: string;
+		separately?: boolean;
+	}): Promise<Run>;
 	listRuns(input: Record<string, never>): Promise<Run[]>;
 	getRun(input: { id: string }): Promise<Run>;
 	getTaskLog(input: { taskId: string }): Promise<LogEntry[]>;

@@ -85,9 +85,11 @@
 					<div class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm bg-muted px-4 py-2">
 						<Markdown text={item.text} streaming={working && item === items.at(-1)} />
 					</div>
-					<span class="flex max-w-full items-center gap-1 text-xs text-muted-foreground">
+					<span class="flex max-w-full flex-wrap items-center gap-1 text-xs text-muted-foreground">
 						{#if showRepos}
-							<Badge variant="outline" class="max-w-[12rem] truncate">{item.repos[0]}</Badge>
+							{#each item.repos as repo (repo)}
+								<Badge variant="outline" class="max-w-[12rem] truncate">{repo}</Badge>
+							{/each}
 						{/if}
 						{time(item.at)}
 					</span>
@@ -99,7 +101,9 @@
 				>
 					<MessageCircle class="mt-0.5 size-3 shrink-0" />
 					<span class="min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">
-						{#if showRepos}<span class="text-foreground/70">{item.repos[0]}:</span>{/if}
+						{#if showRepos && item.repos.length === 1}<span class="text-foreground/70"
+								>{item.repos[0]}:</span
+							>{/if}
 						{item.text}
 					</span>
 				</div>
@@ -109,7 +113,7 @@
 					data-kind="tool"
 				>
 					<Wrench class="size-3 shrink-0" />
-					{#if showRepos}
+					{#if showRepos && item.repos.length === 1}
 						<span class="max-w-[10rem] shrink-0 truncate text-foreground/70">{item.repos[0]}</span>
 					{/if}
 					<span class="min-w-0 truncate" title={item.text}>{item.text}</span>

@@ -64,8 +64,11 @@ export function buildThread(
 		repos: tasks.map((t) => t.repositoryName)
 	});
 
+	// Together, one agent works across every repository: its follow-ups are kept on the first task
+	// and go to all of them.
+	const together = (run.kind ?? 'code') === 'code' && !!run.together;
 	// Follow-ups: one message per text sent at (about) the same time, listing its repositories.
-	for (const task of tasks) {
+	for (const task of together ? run.tasks.slice(0, 1) : tasks) {
 		for (const followUp of task.followUps ?? []) {
 			const time = Date.parse(followUp.at);
 			const existing = items.find(
@@ -82,7 +85,7 @@ export function buildThread(
 					kind: 'user',
 					text: followUp.instruction,
 					at: followUp.at,
-					repos: [task.repositoryName]
+					repos: together ? tasks.map((t) => t.repositoryName) : [task.repositoryName]
 				});
 		}
 	}
@@ -94,11 +97,20 @@ export function buildThread(
 			: run.switchedFrom
 				? Date.parse(run.switchedFrom.at)
 				: -Infinity;
-	for (const task of tasks) {
+	// Together, what the agent says and does is kept on the first task but is about all of them:
+	// it's labelled with every repository, and shown on each one's own tab too.
+	const lead = run.tasks[0];
+	const sessionKinds: LogEntry['kind'][] = ['assistant', 'result', 'tool'];
+	const sources =
+		together && !tasks.includes(lead) ? [...tasks, { ...lead, sessionOnly: true }] : tasks;
+	for (const task of sources) {
+		const sessionOnly = 'sessionOnly' in task;
 		const own: ThreadItem[] = [];
 		(logs[task.id] ?? []).forEach((entry, index) => {
 			// The follow-up note repeats a message that's already shown as yours.
 			if (entry.kind === 'info' && entry.text.startsWith('Follow-up: ')) return;
+			const session = together && task.id === lead.id && sessionKinds.includes(entry.kind);
+			if (sessionOnly && !session) return;
 			const kind = entry.kind === 'result' ? 'assistant' : entry.kind;
 			const readOnly = Date.parse(entry.at) < readOnlyUntil;
 			const text = readOnly && kind === 'assistant' ? stripJson(entry.text) : entry.text;
@@ -108,11 +120,12 @@ export function buildThread(
 				kind,
 				text,
 				at: entry.at,
-				repos: [task.repositoryName]
+				repos: session ? tasks.map((t) => t.repositoryName) : [task.repositoryName]
 			});
 		});
 		markProgressNotes(own, task);
 		items.push(...own);
+		if (sessionOnly) continue;
 		// The latest report, where it was produced: when the task finished, or just before the
 		// question being answered now.
 		if (task.review || task.exploration) {

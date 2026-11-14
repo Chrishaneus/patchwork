@@ -29,6 +29,7 @@ import { publishTask, postReview, syncPullRequests } from './publishing.js';
 import { findPullRequestsToReview, listPullRequests } from './pull-requests.js';
 import { createTaskQueue, startTimeLimit, type TaskHandle } from './queue.js';
 import { dropWorkingCopy, executeReadOnlyTask } from './read-only-task.js';
+import { executeTogether } from './together-task.js';
 import { recoverInterrupted } from './recovery.js';
 import { cleanAttributes, reviewFocus } from './workflows.js';
 
@@ -58,19 +59,16 @@ export function createRunService(deps: RunServiceDeps) {
 		const clearTimeLimit = startTimeLimit(handle, settings.timeoutMinutes);
 		const run = (await ctx.findRun(task.runId))!;
 		const kind = run.kind ?? 'code';
+		// A change across repositories is one agent session, run by the first task for all of them.
+		const together = kind === 'code' && !!run.together;
 		try {
 			if (!repo) throw new EngineError('repository_not_found', 'The repository was removed.');
 			const input = { taskId, task, run, repo, signal, model: settings.model, say, followUp };
-			if (kind === 'code') await executeCodeTask(ctx, { ...input, switched });
+			if (together) await executeTogether(ctx, { run, signal, model: settings.model, followUp });
+			else if (kind === 'code') await executeCodeTask(ctx, { ...input, switched });
 			else await executeReadOnlyTask(ctx, input);
 		} catch (error) {
 			const reason = handle.reason;
-			const latest = await findTask(taskId);
-			const diffStat =
-				kind === 'code' && latest.worktreePath && latest.baseCommit
-					? ((await collectDiff(latest.worktreePath, latest.baseCommit).catch(() => null))?.stat ??
-						null)
-					: null;
 			const failure: EngineErrorData | null =
 				reason === 'cancelled'
 					? null
@@ -82,14 +80,27 @@ export function createRunService(deps: RunServiceDeps) {
 									code: 'agent_failed',
 									message: error instanceof Error ? error.message : String(error)
 								};
-			log(taskId, { kind: 'error', text: failure ? failure.message : 'Cancelled.' });
-			if (kind !== 'code') await dropWorkingCopy(ctx, taskId);
-			await updateTask(taskId, {
-				status: reason === 'cancelled' ? 'cancelled' : 'failed',
-				finishedAt: new Date().toISOString(),
-				error: failure,
-				diffStat
-			});
+			// Together, the session's end is every unfinished task's end.
+			const ended = together
+				? ((await ctx.findRun(run.id))?.tasks ?? []).filter(
+						(t) => t.id === taskId || activeTaskStatuses.includes(t.status)
+					)
+				: [await findTask(taskId)];
+			for (const latest of ended) {
+				const diffStat =
+					kind === 'code' && latest.worktreePath && latest.baseCommit
+						? ((await collectDiff(latest.worktreePath, latest.baseCommit).catch(() => null))
+								?.stat ?? null)
+						: null;
+				log(latest.id, { kind: 'error', text: failure ? failure.message : 'Cancelled.' });
+				if (kind !== 'code') await dropWorkingCopy(ctx, latest.id);
+				await updateTask(latest.id, {
+					status: reason === 'cancelled' ? 'cancelled' : 'failed',
+					finishedAt: new Date().toISOString(),
+					error: failure,
+					diffStat
+				});
+			}
 		} finally {
 			clearTimeLimit();
 		}
@@ -100,7 +111,8 @@ export function createRunService(deps: RunServiceDeps) {
 		await store.update((data) => {
 			data.runs.unshift(run);
 		});
-		queue.enqueue(run.tasks.map((t) => t.id));
+		// Together, the first task runs the session for all of them.
+		queue.enqueue(run.together ? [run.tasks[0].id] : run.tasks.map((t) => t.id));
 		return run;
 	}
 
@@ -138,6 +150,53 @@ export function createRunService(deps: RunServiceDeps) {
 		});
 	}
 
+	/** Stop a change across repositories: the session, wherever it's asked. */
+	async function cancelTogether(run: Run, asked: Task): Promise<Task> {
+		const lead = run.tasks[0];
+		const handle = queue.handle(lead.id);
+		if (!handle || !run.tasks.some((t) => activeTaskStatuses.includes(t.status))) {
+			throw new EngineError('invalid_state', 'Only queued or running tasks can be cancelled.');
+		}
+		handle.reason = 'cancelled';
+		handle.controller.abort(new EngineError('interrupted', 'Cancelled'));
+		if (queue.remove(lead.id)) {
+			// It hadn't started: nothing will report the end, so do it here.
+			for (const task of run.tasks.filter((t) => t.status === 'queued')) {
+				log(task.id, { kind: 'error', text: 'Cancelled.' });
+				await updateTask(task.id, { status: 'cancelled', finishedAt: new Date().toISOString() });
+			}
+		}
+		return findTask(asked.id);
+	}
+
+	/** More work on a change across repositories: the same session, in the same working copies. */
+	async function followUpTogether(run: Run, asked: Task, text: string): Promise<Task> {
+		const lead = run.tasks[0];
+		const allowed: Task['status'][] = ['awaiting_review', 'failed', 'cancelled'];
+		if (run.tasks.some((t) => !allowed.includes(t.status) || !t.worktreePath || !t.baseCommit)) {
+			throw new EngineError(
+				'invalid_state',
+				'Follow-ups need every repository’s change in review (or failed or cancelled, with its working copy).'
+			);
+		}
+		const at = new Date().toISOString();
+		for (const task of run.tasks) {
+			await updateTask(task.id, {
+				status: 'queued',
+				error: null,
+				publishError: null,
+				finishedAt: null,
+				// The conversation is the session's; it's kept on the first task.
+				...(task.id === lead.id
+					? { followUps: [...(task.followUps ?? []), { instruction: text, at }] }
+					: {})
+			});
+		}
+		pendingFollowUps.set(lead.id, text);
+		queue.enqueue([lead.id]);
+		return findTask(asked.id);
+	}
+
 	return {
 		recoverInterrupted: () => recoverInterrupted(store, deps.events),
 
@@ -145,6 +204,7 @@ export function createRunService(deps: RunServiceDeps) {
 			repositoryIds: string[];
 			instruction: string;
 			branch?: string;
+			separately?: boolean;
 		}): Promise<Run> {
 			const instruction = input.instruction?.trim();
 			const ids = [...new Set(input.repositoryIds ?? [])];
@@ -181,7 +241,9 @@ export function createRunService(deps: RunServiceDeps) {
 				kind: 'code',
 				instruction,
 				createdAt: new Date().toISOString(),
-				tasks
+				tasks,
+				// Several repositories are one change, by one agent, unless asked otherwise.
+				...(tasks.length > 1 && !input.separately ? { together: true } : {})
 			});
 		},
 
@@ -213,7 +275,10 @@ export function createRunService(deps: RunServiceDeps) {
 		},
 
 		async cancel(taskId: string): Promise<Task> {
-			const task = await findTask(taskId);
+			const asked = await findTask(taskId);
+			const run = await ctx.findRun(asked.runId);
+			if (run?.together && run.kind === 'code') return cancelTogether(run, asked);
+			const task = asked;
 			const handle = queue.handle(taskId);
 			if (!handle || !activeTaskStatuses.includes(task.status)) {
 				throw new EngineError('invalid_state', 'Only queued or running tasks can be cancelled.');
@@ -257,6 +322,8 @@ export function createRunService(deps: RunServiceDeps) {
 			if (!(await ctx.findRepository(task.repositoryId))) {
 				throw new EngineError('repository_not_found', 'The repository was removed.');
 			}
+			const run = await ctx.findRun(task.runId);
+			if (run?.together && kind === 'code') return followUpTogether(run, task, text);
 
 			const queued = await updateTask(taskId, {
 				status: 'queued',

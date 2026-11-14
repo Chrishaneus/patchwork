@@ -7,7 +7,8 @@ import type { AgentRunner } from './runner.js';
 /**
  * A scripted agent for end-to-end tests (selected with PATCHWORK_TEST_AGENT). It never calls a model.
  * - "edit": logs a few steps, writes a file and finishes. When the instruction mentions "outside
- *   the sandbox", it first asks to run `docker compose up -d` there.
+ *   the sandbox", it first asks to run `docker compose up -d` there. Across repositories, it
+ *   writes the file in each and answers with a pull request per repository.
  * - "hang": waits until it is cancelled.
  * Reviews answer with scores and one suggestion on the first changed file, per pull request.
  */
@@ -33,7 +34,16 @@ function suggestOn(dir: string, base: string | undefined) {
 }
 
 export function createTestAgent(mode: string): AgentRunner {
-	return async ({ cwd, instruction, signal, log, mode: workflow, attributes, requestApproval }) => {
+	return async ({
+		cwd,
+		instruction,
+		signal,
+		log,
+		mode: workflow,
+		attributes,
+		requestApproval,
+		workingCopies
+	}) => {
 		const wait = (ms: number) =>
 			new Promise<void>((resolve, reject) => {
 				if (signal.aborted) return reject(new Error('aborted'));
@@ -138,6 +148,20 @@ export function createTestAgent(mode: string): AgentRunner {
 			});
 			if (allowed) log({ kind: 'tool', text: `$ ${command}` });
 			outside = allowed ? ' Started the database.' : ' Couldn’t start the database.';
+		}
+		// Across repositories: a changelog entry in each, and a pull request for each.
+		if (workingCopies && workingCopies.length > 1) {
+			const sections = [];
+			for (const copy of workingCopies) {
+				log({ kind: 'tool', text: `Write ${copy.folder}/CHANGELOG.md` });
+				await writeFile(path.join(copy.path, 'CHANGELOG.md'), `# Changelog\n\n- ${instruction}\n`);
+				sections.push(
+					`Repository: ${copy.folder}\nTitle: Add a changelog entry to ${copy.folder}\n\nAdded a changelog entry to ${copy.folder} for "${instruction}", with the other repositories' entries.`
+				);
+			}
+			const summary = sections.join('\n\n');
+			log({ kind: 'result', text: summary });
+			return { summary, costUsd: 0.0123, turns: 2 };
 		}
 		log({ kind: 'tool', text: 'Write CHANGELOG.md' });
 		await writeFile(path.join(cwd, 'CHANGELOG.md'), `# Changelog\n\n- ${instruction}\n`);

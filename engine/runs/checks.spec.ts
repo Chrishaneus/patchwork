@@ -125,7 +125,8 @@ describe('concurrency', () => {
 			ids.push((await engine.addRepository({ path: dir })).id);
 		}
 
-		const run = await engine.startRun({ repositoryIds: ids, instruction: 'x' });
+		// An agent per repository, so each is a task of its own in the queue.
+		const run = await engine.startRun({ repositoryIds: ids, instruction: 'x', separately: true });
 		await waitFor(engine, run.tasks[0].id, ['running']);
 		await new Promise((r) => setTimeout(r, 300));
 		const statuses = async () => (await engine.getRun({ id: run.id })).tasks.map((t) => t.status);

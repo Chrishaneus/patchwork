@@ -67,7 +67,7 @@ export class RunsState {
 		]);
 	}
 
-	async start(input: { repositoryIds: string[]; instruction: string; branch?: string }) {
+	async start(input: Parameters<EngineClient['startRun']>[0]) {
 		const run = await this.client.startRun(input);
 		if (!this.run(run.id)) this.runs = [run, ...this.runs];
 		return run;

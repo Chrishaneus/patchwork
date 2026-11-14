@@ -203,6 +203,24 @@ There are two ways, and which ones are available depends on where the app runs:
 
 A run is one instruction applied to N repositories. Each repository gets its own **task**.
 
+With several repositories a code run is **together** by default (`Run.together`): one agent
+makes one change across all of them, since a product split over repositories (an API and its
+webapp) usually needs both sides designed at once. The run's first task runs that session:
+
+- Every task still gets its own worktree and branch, but they sit side by side in one folder,
+  `<app-data>/worktrees/<runId>/<repository name>`, and the agent works in that folder. Its
+  sandbox can write the folder and each worktree's git data.
+- The agent's prompt lists the folders, and asks for one pull request per repository it changed,
+  each in a `Repository: <folder>` section with its own title. Those sections become each task's
+  title and summary.
+- Then each repository's checks run in its own folder, and each task reports its own diff and
+  waits for review. Review and publishing stay per repository.
+- The log, approvals, cost and follow-ups are the session's and are kept on the first task. A
+  follow-up or cancel on any task applies to the session; a failure fails every unfinished task.
+
+`separately` (`startRun`) keeps the older behaviour: an agent per repository, each a task of its
+own in the queue. The rest of this section describes a single task.
+
 For each task, at most 2–3 run at the same time (configurable):
 
 1. **Prepare.** `git fetch`, then `git worktree add <app-data>/worktrees/<taskId> -b <branch>

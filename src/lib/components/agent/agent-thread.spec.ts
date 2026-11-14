@@ -55,6 +55,44 @@ describe('buildThread', () => {
 		expect(thread.every((i) => i.repos.join() === 'web')).toBe(true);
 	});
 
+	it('shows a follow-up to one agent across repositories as sent to all, on every tab', () => {
+		const together = {
+			...run,
+			together: true,
+			tasks: [task('a', 'api', [{ instruction: 'Add logout', at: t(30) }]), task('b', 'web')]
+		} as Run;
+		const reply = (thread: ReturnType<typeof buildThread>) =>
+			thread.find((i) => i.text === 'Add logout')?.repos.join(',');
+		expect(reply(buildThread(together, logs))).toBe('api,web');
+		expect(reply(buildThread(together, logs, 'b'))).toBe('web');
+	});
+
+	it('labels what one agent across repositories says with all of them, on every tab', () => {
+		const together = { ...run, together: true, tasks: [task('a', 'api'), task('b', 'web')] } as Run;
+		const sessionLogs = {
+			a: [
+				entry(1, 'info', 'Fetching origin/main…'),
+				entry(2, 'tool', 'Write web/login.ts'),
+				entry(5, 'result', 'Done in both.')
+			],
+			b: [entry(6, 'info', 'Finished: 1 file changed, +1 −0.')]
+		};
+		const all = buildThread(together, sessionLogs);
+		expect(all.slice(1).map((i) => [i.text, i.repos.join(',')])).toEqual([
+			['Fetching origin/main…', 'api'],
+			['Write web/login.ts', 'api,web'],
+			['Done in both.', 'api,web'],
+			['Finished: 1 file changed, +1 −0.', 'web']
+		]);
+		// The second repository's tab has the agent's work, but not the first one's own notes.
+		expect(buildThread(together, sessionLogs, 'b').map((i) => i.text)).toEqual([
+			'Add a changelog',
+			'Write web/login.ts',
+			'Done in both.',
+			'Finished: 1 file changed, +1 −0.'
+		]);
+	});
+
 	it('shows what the agent says while still working as notes, and only the last as its reply', () => {
 		const working = (status: Task['status']) =>
 			({

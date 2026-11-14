@@ -62,6 +62,8 @@
 	let selected = $state<string[]>([]);
 	let text = $state('');
 	let branch = $state('');
+	/** Several repositories: one agent across them (together), or one each (separately). */
+	let split = $state<'together' | 'separately'>('together');
 	let repositoryId = $state('');
 	let pullNumber = $state('');
 	/** Pull requests picked to review together (beside any links in the message). */
@@ -210,7 +212,8 @@
 							: await runs.start({
 									repositoryIds,
 									instruction: message,
-									branch: selected.length === 1 && branch.trim() ? branch.trim() : undefined
+									branch: selected.length === 1 && branch.trim() ? branch.trim() : undefined,
+									separately: selected.length > 1 && split === 'separately' ? true : undefined
 								});
 				runId = run.id;
 			}
@@ -386,6 +389,29 @@
 							bind:value={branch}
 						/>
 						<p class="text-xs text-muted-foreground">{m.new_change_branch_hint()}</p>
+					</div>
+				{:else if mode === 'change' && selected.length > 1}
+					<div class="mt-3 flex flex-col gap-1.5 border-t pt-3">
+						<p class="text-sm font-medium">{m.new_change_split_label()}</p>
+						<ToggleGroup.Root
+							type="single"
+							variant="outline"
+							size="sm"
+							class="self-start"
+							value={split}
+							onValueChange={(v) => {
+								if (v) split = v as typeof split;
+							}}
+							aria-label={m.new_change_split_label()}
+							data-testid="change-split"
+							data-split={split}
+						>
+							<ToggleGroup.Item value="together">{m.new_change_together()}</ToggleGroup.Item>
+							<ToggleGroup.Item value="separately">{m.new_change_separately()}</ToggleGroup.Item>
+						</ToggleGroup.Root>
+						<p class="text-xs text-muted-foreground">
+							{split === 'together' ? m.new_change_together_hint() : m.new_change_separately_hint()}
+						</p>
 					</div>
 				{/if}
 			</div>

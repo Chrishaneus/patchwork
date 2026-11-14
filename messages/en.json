@@ -76,6 +76,12 @@
 	"task_status_discarded": "Discarded",
 	"new_change_branch_label": "Branch name (optional)",
 	"new_change_branch_hint": "Leave empty to generate one. Only for a single repository.",
+	"new_change_split_label": "Across repositories",
+	"new_change_together": "Together",
+	"new_change_separately": "Separately",
+	"new_change_together_hint": "One agent makes the change across all of them, with a pull request in each.",
+	"new_change_separately_hint": "Each repository gets an agent of its own, working on the same request.",
+	"agent_together": "One agent across {count} repositories",
 	"new_change_no_repos": "Add a repository first.",
 	"runs_open": "Open",
 	"runs_tasks_count": [

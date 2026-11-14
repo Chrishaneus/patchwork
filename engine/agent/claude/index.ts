@@ -205,7 +205,8 @@ export function createClaudeAgentRunner(
 									sandboxPolicy({
 										cwd: input.cwd,
 										protectedFiles: opts.protectedFiles ?? [],
-										readOnly: !!input.mode && input.mode !== 'code'
+										readOnly: !!input.mode && input.mode !== 'code',
+										workingCopies: input.workingCopies?.map((c) => c.path)
 									}),
 									input.cwd,
 									canAsk

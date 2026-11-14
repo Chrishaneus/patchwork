@@ -117,8 +117,13 @@ Click a mode to set it yourself; it stays until you pick Auto again. The modes:
 - **Change:** pick repositories (your GitHub repositories included) and describe the change. Each
   repository gets its own working copy and branch.
   - With one repository you can name the branch. Saved templates sit under the message box.
-  - Talk to the agent from there. With several repositories, the **All repositories** tab sends a
-    reply to every one, and a repository's own tab talks to just that one.
+  - With several repositories, **Together** (the default) has one agent make the change across
+    all of them: say, an API and its webapp. It sees every working copy side by side, works out
+    how the parts fit, and writes a pull request for each repository it changed, saying which
+    ones go together and in what order to merge them. Replies and **Stop** go to that one agent.
+  - **Separately** gives each repository an agent of its own, all with the same request. The
+    **All repositories** tab then sends a reply to every one, and a repository's own tab talks to
+    just that one.
   - **Stop** halts the agent. **Review & publish** opens the run page with the diffs and pull
     requests.
 - **Ask:** pick repositories and ask a question. The agent reads the code and answers in the

@@ -76,6 +76,12 @@
 	"task_status_discarded": "Descartado",
 	"new_change_branch_label": "Nombre de la rama (opcional)",
 	"new_change_branch_hint": "Déjalo vacío para generar uno. Solo para un repositorio.",
+	"new_change_split_label": "Entre repositorios",
+	"new_change_together": "Juntos",
+	"new_change_separately": "Por separado",
+	"new_change_together_hint": "Un agente hace el cambio en todos ellos, con un pull request en cada uno.",
+	"new_change_separately_hint": "Cada repositorio tiene su propio agente, con la misma petición.",
+	"agent_together": "Un agente en {count} repositorios",
 	"new_change_no_repos": "Primero añade un repositorio.",
 	"runs_open": "Abrir",
 	"runs_tasks_count": [

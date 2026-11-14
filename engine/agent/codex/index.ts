@@ -248,7 +248,8 @@ export function createCodexAgentRunner(
 		const policy = sandboxPolicy({
 			cwd: input.cwd,
 			protectedFiles: opts.protectedFiles ?? [],
-			readOnly
+			readOnly,
+			workingCopies: input.workingCopies?.map((c) => c.path)
 		});
 		const env = Object.fromEntries(
 			Object.entries(withoutSecrets()).filter(

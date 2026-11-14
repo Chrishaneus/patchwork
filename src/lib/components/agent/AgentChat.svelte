@@ -6,6 +6,8 @@
 	import GitPullRequestArrow from '@lucide/svelte/icons/git-pull-request-arrow';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
+	import Users from '@lucide/svelte/icons/users';
+	import { Badge } from '#lib/components/ui/badge/index.js';
 	import AgentComposer from '#lib/components/agent/AgentComposer.svelte';
 	import AgentThread from '#lib/components/agent/AgentThread.svelte';
 	import ExplorationReport from '#lib/components/explore/ExplorationReport.svelte';
@@ -40,7 +42,9 @@
 	});
 
 	const targets = $derived(tab === 'all' ? run.tasks : run.tasks.filter((t) => t.id === tab));
-	const working = $derived(targets.some((t) => activeTaskStatuses.includes(t.status)));
+	const working = $derived(
+		(run.together ? run.tasks : targets).some((t) => activeTaskStatuses.includes(t.status))
+	);
 	const workingCount = $derived(
 		run.tasks.filter((t) => activeTaskStatuses.includes(t.status)).length
 	);
@@ -51,7 +55,12 @@
 		kind === 'code'
 			? ['awaiting_review', 'failed', 'cancelled'].includes(t.status) && !!t.worktreePath
 			: ['completed', 'failed', 'cancelled'].includes(t.status);
-	const replyable = $derived(targets.filter(canReply));
+	// Together, one agent works across every repository: replies and stops go to its session, on
+	// the first task, whichever repository is shown.
+	const together = $derived(kind === 'code' && !!run.together);
+	const replyable = $derived(
+		together ? (run.tasks.every(canReply) ? [run.tasks[0]] : []) : targets.filter(canReply)
+	);
 	const thread = $derived(buildThread(run, runs.logs, tab === 'all' ? undefined : tab));
 	let switchError = $state<EngineErrorCode | null>(null);
 	const errors = $derived([
@@ -127,7 +136,8 @@
 	}
 
 	function stop() {
-		for (const t of targets) if (activeTaskStatuses.includes(t.status)) runs.cancel(t.id);
+		if (together) runs.cancel(run.tasks[0].id);
+		else for (const t of targets) if (activeTaskStatuses.includes(t.status)) runs.cancel(t.id);
 	}
 </script>
 
@@ -253,6 +263,11 @@
 	>
 		<div class="p-2">
 			<p class="hidden px-2 pt-1 pb-2 text-sm font-medium lg:block">{m.agent_repos()}</p>
+			{#if together}
+				<Badge variant="secondary" class="mx-2 mb-2" data-testid="agent-together"
+					><Users />{m.agent_together({ count: run.tasks.length })}</Badge
+				>
+			{/if}
 			<div class="flex flex-col gap-1" role="tablist" aria-orientation="vertical">
 				{#if run.tasks.length > 1}
 					<button
