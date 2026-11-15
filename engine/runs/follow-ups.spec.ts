@@ -120,7 +120,7 @@ describe('follow-ups', () => {
 		expect(switched).toMatchObject({ kind: 'code', switchedFrom: { kind: 'ask' } });
 		expect(switched.tasks[0]).toMatchObject({
 			status: 'queued',
-			branch: expect.stringMatching(/^ai\/add-one-/)
+			branch: 'add-one'
 		});
 		expect(events).toEqual(['code']);
 		const done = await waitFor(engine, asked.id, ['awaiting_review', 'failed']);

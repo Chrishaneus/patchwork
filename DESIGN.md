@@ -248,6 +248,11 @@ discarded.
 
 Details as built in M2:
 
+- **Branch name:** the first few meaningful words of the instruction, without how it was asked
+  ("Can you upgrade eslint to v10 please" becomes `upgrade-eslint-v10`), at most 40 characters.
+  When a branch already has the name (locally, on the remote as far as the last fetch knows, or
+  held by another task) it gets `-2`, `-3`…; a change across repositories has the same name in
+  each. With one repository you can name it yourself.
 - **Fetch:** if fetching fails (offline, no access), the task carries on from the local copy of
   the base branch and says so in the log.
 - **Cancel:** a cancelled task keeps its worktree, so you can look at the partial work or discard

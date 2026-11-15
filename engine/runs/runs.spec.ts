@@ -60,7 +60,7 @@ describe('runs', () => {
 		});
 		const [queued] = run.tasks;
 		expect(queued.status).toBe('queued');
-		expect(queued.branch).toMatch(/^ai\/add-a-hello-file-[0-9a-f]{6}$/);
+		expect(queued.branch).toBe('add-hello-file');
 
 		const done = await waitForStatus(engine, queued.id, ['awaiting_review', 'failed']);
 		expect(done).toMatchObject({

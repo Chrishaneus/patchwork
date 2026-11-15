@@ -19,7 +19,8 @@ import {
 	diffBetween,
 	removeWorktree,
 	removeWorktreeOnly,
-	suggestBranchName
+	suggestBranchName,
+	uniqueBranchName
 } from '../git/worktrees.js';
 import { readStatus } from '../repositories/index.js';
 import { performChecks } from './checks.js';
@@ -34,6 +35,15 @@ import { recoverInterrupted } from './recovery.js';
 import { cleanAttributes, reviewFocus } from './workflows.js';
 
 export type { RunServiceDeps } from './context.js';
+
+/** Branches tasks on a repository hold that may not exist in git yet (queued, or not cloned). */
+function reservedBranches(runs: Run[], repositoryId: string): string[] {
+	return runs.flatMap((run) =>
+		run.tasks
+			.filter((t) => t.repositoryId === repositoryId && t.status !== 'discarded' && t.branch)
+			.map((t) => t.branch)
+	);
+}
 
 export function createRunService(deps: RunServiceDeps) {
 	const ctx = createRunContext(deps);
@@ -220,7 +230,7 @@ export function createRunService(deps: RunServiceDeps) {
 				);
 			}
 
-			const { repositories } = await store.read();
+			const { repositories, runs: existing } = await store.read();
 			const runId = randomUUID();
 			const tasks: Task[] = [];
 			for (const id of ids) {
@@ -232,7 +242,13 @@ export function createRunService(deps: RunServiceDeps) {
 					throw new EngineError('repository_unavailable', `The folder is missing: ${repo.path}`);
 				}
 				const taskId = randomUUID();
-				const branch = branchOverride ?? suggestBranchName(instruction, taskId.slice(0, 6));
+				const branch =
+					branchOverride ??
+					(await uniqueBranchName(
+						repo,
+						suggestBranchName(instruction),
+						reservedBranches(existing, repo.id)
+					));
 				await assertValidBranchName(repo.path, branch);
 				tasks.push(newTask({ id: taskId, runId, repo, branch, baseBranch: repo.defaultBranch }));
 			}
@@ -369,7 +385,11 @@ export function createRunService(deps: RunServiceDeps) {
 			for (const task of done) {
 				const repo = repositories.find((r) => r.id === task.repositoryId);
 				if (!repo) throw new EngineError('repository_not_found', 'The repository was removed.');
-				const branch = suggestBranchName(text, task.id.slice(0, 6));
+				const branch = await uniqueBranchName(
+					repo,
+					suggestBranchName(text),
+					reservedBranches((await store.read()).runs, repo.id)
+				);
 				await assertValidBranchName(repo.path, branch);
 				branches.set(task.id, branch);
 				prompts.set(task.id, switchPrompt(run, task, text));

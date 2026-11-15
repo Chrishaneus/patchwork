@@ -11,16 +11,61 @@ import { git, tryGit } from './git.js';
 
 const MAX_PATCH_BYTES = 2 * 1024 * 1024;
 
-/** Turn an instruction into a readable branch name, e.g. `ai/upgrade-eslint-to-v10-3f9a1c`. */
-export function suggestBranchName(instruction: string, uniqueSuffix: string): string {
-	const slug = instruction
+/** Words a request is phrased with that say nothing about the change itself. */
+const FILLER = new Set(
+	(
+		'a an the can could would will you your please pls i im we us our me my want wanted need ' +
+		'needs like let lets make sure just also so that this these those it its is are be was ' +
+		'were when while still to of in on at for from with and or but by as into some any there ' +
+		'here hey hi thanks thank should'
+	).split(' ')
+);
+
+/**
+ * A short branch name from an instruction: its first few meaningful words, e.g. "Can you upgrade
+ * eslint to v10 please" becomes `upgrade-eslint-v10`.
+ */
+export function suggestBranchName(instruction: string): string {
+	const words = instruction
 		.toLowerCase()
 		.normalize('NFKD')
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '')
-		.slice(0, 40)
-		.replace(/-+$/, '');
-	return `ai/${slug || 'change'}-${uniqueSuffix}`;
+		.replace(/[̀-ͯ]/g, '')
+		.replace(/'/g, '')
+		.split(/[^a-z0-9]+/)
+		.filter((word) => word && !FILLER.has(word));
+	let name = '';
+	for (const word of words.slice(0, 5)) {
+		const next = name ? `${name}-${word}` : word;
+		if (next.length > 40) break;
+		name = next;
+	}
+	return name || words[0]?.slice(0, 40) || 'change';
+}
+
+/**
+ * The name, or with `-2`, `-3`… added when a branch already has it: here, on the remote as far as
+ * the last fetch knows, or in `reserved` (tasks whose branch isn't made yet).
+ */
+export async function uniqueBranchName(
+	repo: Repository,
+	name: string,
+	reserved: Iterable<string> = []
+): Promise<string> {
+	const held = new Set(reserved);
+	const cloned = !!(await stat(repo.path).catch(() => null));
+	const exists = async (ref: string) =>
+		!!(await tryGit(repo.path, ['rev-parse', '--verify', '--quiet', ref]));
+	const taken = async (branch: string) => {
+		if (held.has(branch)) return true;
+		if (!cloned) return false;
+		return (
+			(await exists(`refs/heads/${branch}`)) ||
+			(await exists(`refs/remotes/${repo.remoteName}/${branch}`))
+		);
+	};
+	let branch = name;
+	for (let n = 2; await taken(branch); n++) branch = `${name}-${n}`;
+	return branch;
 }
 
 /**

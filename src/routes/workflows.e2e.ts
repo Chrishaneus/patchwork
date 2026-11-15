@@ -247,7 +247,7 @@ test('a question gets a read-only answer, not a branch', async ({ page }) => {
 		'data-task-status',
 		'awaiting_review'
 	);
-	await expect(thread).toContainText('Switching to a change on the branch ai/add-a-page-about');
+	await expect(thread).toContainText('Switching to a change on the branch add-page-about-tests');
 	await expect(thread.locator('[data-kind="user"]')).toHaveCount(3);
 	await expect(replyMode).toHaveCount(0);
 	await expect(page.getByRole('textbox', { name: 'Reply to the agent…' })).toBeVisible();
