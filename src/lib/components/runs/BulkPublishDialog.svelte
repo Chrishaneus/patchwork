@@ -80,7 +80,8 @@
 				<Button {...props}><GitPullRequestArrow />{m.bulk_publish_open()}</Button>
 			{/snippet}
 		</Dialog.Trigger>
-		<Dialog.Content class="sm:max-w-2xl">
+		<!-- Never taller than the screen, however many repositories are listed. -->
+		<Dialog.Content class="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-2xl">
 			<form class="grid gap-4" onsubmit={publish}>
 				<Dialog.Header>
 					<Dialog.Title>{m.bulk_publish_title()}</Dialog.Title>

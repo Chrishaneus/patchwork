@@ -124,7 +124,14 @@ test('publishes a pull request from the browser', async ({ page, request }) => {
 	const task = page.getByTestId('task');
 	await expect(task).toHaveAttribute('data-task-status', 'awaiting_review');
 	await task.getByRole('button', { name: 'Open pull request' }).click();
-	await page.getByRole('dialog').getByRole('button', { name: 'Publish' }).click();
+	// However long the description, the dialog fits on the screen and can be sent.
+	const dialog = page.getByRole('dialog');
+	const description = Array.from({ length: 120 }, (_, i) => `- Line ${i + 1}`).join('\n');
+	await dialog.getByRole('textbox', { name: 'Description' }).fill(description);
+	const box = (await dialog.boundingBox())!;
+	expect(box.y).toBeGreaterThanOrEqual(0);
+	expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+	await dialog.getByRole('button', { name: 'Publish' }).click();
 	await expect(task).toHaveAttribute('data-task-status', 'published');
 	await expect(task.getByRole('link', { name: 'Pull request #1' })).toBeVisible();
 
@@ -133,7 +140,11 @@ test('publishes a pull request from the browser', async ({ page, request }) => {
 			headers: { authorization: 'Bearer x' }
 		})
 	).json();
-	expect(pulls[0]).toMatchObject({ title: 'Add a changelog via the web', base: { ref: 'main' } });
+	expect(pulls[0]).toMatchObject({
+		title: 'Add a changelog via the web',
+		body: description,
+		base: { ref: 'main' }
+	});
 	expect(git('ls-remote', '--heads', 'origin')).toContain(pulls[0].head.ref);
 });
 

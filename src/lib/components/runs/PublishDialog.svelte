@@ -73,7 +73,8 @@
 			</Button>
 		{/snippet}
 	</Dialog.Trigger>
-	<Dialog.Content class="sm:max-w-2xl">
+	<!-- Never taller than the screen, so the button stays reachable however long the text. -->
+	<Dialog.Content class="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-2xl">
 		<form class="grid gap-4" onsubmit={publish}>
 			<Dialog.Header>
 				<Dialog.Title
@@ -101,7 +102,13 @@
 			</div>
 			<div class="grid gap-2">
 				<Label for="pr-body">{m.publish_pr_body()}</Label>
-				<Textarea id="pr-body" rows={10} class="font-mono text-xs" bind:value={body} />
+				<!-- It grows with its text up to half the screen, then scrolls. -->
+				<Textarea
+					id="pr-body"
+					rows={10}
+					class="max-h-[50svh] overflow-y-auto font-mono text-xs"
+					bind:value={body}
+				/>
 			</div>
 			{#if provider}
 				<Label class="flex items-center gap-2 font-normal">
