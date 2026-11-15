@@ -256,6 +256,7 @@ export function createCodexAgentRunner(
 				(entry): entry is [string, string] => entry[1] !== undefined
 			)
 		);
+		Object.assign(env, input.env);
 		// Without a key, Codex uses its own login (`codex login`).
 		if (input.apiKey) env[KEY_ENV] = input.apiKey;
 		const overrides = [

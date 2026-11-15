@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import type { TaskChecks } from '#lib/engine/contract.js';
 import { withoutSecrets } from '../core/env.js';
 import type { RunContext } from './context.js';
+import { readyBrowsersEnv } from './test-browsers.js';
 
 const MAX_OUTPUT = 16 * 1024;
 
@@ -21,9 +22,11 @@ export function runCheckCommand(opts: {
 	cwd: string;
 	command: string;
 	signal: AbortSignal;
+	/** More variables, such as where Playwright's browsers are. */
+	env?: Record<string, string>;
 }): Promise<CheckResult> {
 	return new Promise((resolve) => {
-		const env = withoutSecrets({ CI: 'true', FORCE_COLOR: '0' });
+		const env = withoutSecrets({ CI: 'true', FORCE_COLOR: '0', ...opts.env });
 
 		const windows = process.platform === 'win32';
 		const child = windows
@@ -83,7 +86,13 @@ export async function performChecks(
 	};
 	await ctx.updateTask(taskId, { status: 'checking', checks: started });
 	ctx.log(taskId, { kind: 'tool', text: `$ ${command}` });
-	const result = await runCheckCommand({ cwd: worktreePath, command, signal });
+	const result = await runCheckCommand({
+		cwd: worktreePath,
+		command,
+		signal,
+		// The browsers the agent's tests used, when the app installed them.
+		env: readyBrowsersEnv(worktreePath, ctx.deps.browsersDir)
+	});
 	const checks: TaskChecks = {
 		...started,
 		status: !result.stopped && result.exitCode === 0 ? 'passed' : 'failed',

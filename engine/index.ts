@@ -26,6 +26,7 @@ import { createGitHubAuth } from './providers/github-auth.js';
 import { providerAuthEnv } from './providers/index.js';
 import { createRepositoryService } from './repositories/index.js';
 import { createRunService } from './runs/index.js';
+import { installWithNpx, type BrowserInstaller } from './runs/test-browsers.js';
 import { createCredentials } from './settings/credentials.js';
 import { createSettingsService } from './settings/index.js';
 import { createTemplateService } from './settings/templates.js';
@@ -67,6 +68,8 @@ export interface EngineOptions {
 	gitlabApiUrl?: string;
 	/** How often to refresh open pull requests' state; 0 turns the background sync off. */
 	pullRequestSyncMs?: number;
+	/** Installs repositories' Playwright browsers before the agent starts; npx by default. */
+	installBrowsers?: BrowserInstaller;
 }
 
 export interface Engine extends EngineApi {
@@ -132,7 +135,9 @@ export function createEngine(options: EngineOptions): Engine {
 		ensureCloned: (id) => repositories.clone(id),
 		addRepositoryFromUrl: (url) => repositories.addFromUrl(url),
 		concurrency: 2,
-		allowProgram: (id, program) => repositories.allowProgram(id, program)
+		allowProgram: (id, program) => repositories.allowProgram(id, program),
+		browsersDir: path.join(options.dataDir, 'browsers'),
+		installBrowsers: options.installBrowsers ?? installWithNpx
 	});
 	// If recovery fails (e.g. an unreadable data file), the calls that wait on it report the error.
 	const ready = (async () => {

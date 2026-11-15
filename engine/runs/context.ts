@@ -12,6 +12,7 @@ import type { EngineEvents } from '../core/events.js';
 import type { TaskLogs } from '../core/logs.js';
 import type { Store } from '../core/store.js';
 import { providerAuthEnv, providerFor, type ProviderSettings } from '../providers/index.js';
+import { prepareTestBrowsers, type BrowserInstaller } from './test-browsers.js';
 
 export interface RunServiceDeps {
 	store: Store;
@@ -31,6 +32,10 @@ export interface RunServiceDeps {
 	concurrency: number;
 	/** Save a program as always allowed outside the sandbox in a repository. */
 	allowProgram: (repositoryId: string, program: string) => Promise<void>;
+	/** Where the app keeps Playwright browsers for repositories' tests (agents can read it). */
+	browsersDir: string;
+	/** Installs those browsers before the agent starts. */
+	installBrowsers: BrowserInstaller;
 }
 
 /** A queued task for one repository, with nothing done yet. */
@@ -164,6 +169,17 @@ export function createRunContextBase(deps: RunServiceDeps) {
 		return fetched === null ? null : tryGit(repo.path, ['rev-parse', 'FETCH_HEAD^{commit}']);
 	}
 
+	/** Install a working copy's Playwright browsers if it uses Playwright; the agent's env for them. */
+	function testBrowsersEnv(taskId: string, dir: string, signal: AbortSignal) {
+		return prepareTestBrowsers({
+			dir,
+			browsersDir: deps.browsersDir,
+			install: deps.installBrowsers,
+			log: (text) => log(taskId, { kind: 'info', text }),
+			signal
+		});
+	}
+
 	return {
 		deps,
 		store,
@@ -174,7 +190,8 @@ export function createRunContextBase(deps: RunServiceDeps) {
 		log,
 		authEnvFor,
 		prepareSource,
-		fetchCommit
+		fetchCommit,
+		testBrowsersEnv
 	};
 }
 

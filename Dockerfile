@@ -26,6 +26,12 @@ RUN apt-get update \
     # Repositories are mounted from the host and may be owned by a different user id.
     && git config --system safe.directory '*' \
     && mkdir -p /data && chown node:node /data
+# Chromium's system libraries, for repositories' Playwright tests: the app downloads the browser
+# itself (into /data/browsers) for each repository's Playwright version, with npx. Uses the
+# Playwright that the build stage installed (without its browsers).
+COPY --from=build /app/node_modules/playwright-core /tmp/playwright-core
+RUN node /tmp/playwright-core/cli.js install-deps chromium \
+    && rm -rf /tmp/playwright-core /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build

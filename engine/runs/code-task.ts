@@ -119,6 +119,9 @@ export async function executeCodeTask(
 		await ctx.updateTask(taskId, { worktreePath, baseCommit });
 	}
 	if (signal.aborted) throw signal.reason;
+	// Every time, as a follow-up may have changed the Playwright version; quick once installed.
+	const env = await ctx.testBrowsersEnv(taskId, worktreePath, signal);
+	if (signal.aborted) throw signal.reason;
 
 	await ctx.updateTask(taskId, { status: 'running' });
 	const apiKey = await ctx.deps.getApiKey(input.model);
@@ -138,7 +141,8 @@ export async function executeCodeTask(
 		apiKey,
 		signal,
 		log: (entry) => ctx.log(taskId, entry),
-		requestApproval: (ask) => ctx.approvals.request(taskId, ask, signal)
+		requestApproval: (ask) => ctx.approvals.request(taskId, ask, signal),
+		env
 	});
 	if (signal.aborted) throw signal.reason;
 	const before = await ctx.findTask(taskId);

@@ -44,6 +44,15 @@ const LONG_COMMANDS = [
 	'a long time. Wait for them to finish instead of stopping or restarting them.'
 ].join('\n');
 
+/** When the app installed the repository's Playwright browsers before the agent started. */
+const PLAYWRIGHT_READY = [
+	'Playwright’s browsers for this repository are already installed, and PLAYWRIGHT_BROWSERS_PATH',
+	'points at them: run the Playwright tests as they are, without `playwright install` (it can’t',
+	'download here). Commands can’t reach services running on this machine outside your working',
+	'copy, such as a database or an API in Docker; tests that need them must run outside the',
+	'sandbox, so ask for that, or say they weren’t run and why.'
+].join('\n');
+
 export interface AgentRunInput {
 	/** The worktree the agent works in. */
 	cwd: string;
@@ -70,6 +79,11 @@ export interface AgentRunInput {
 	 * it. Runners call it when their agent asks; missing when nobody can answer.
 	 */
 	requestApproval?: (request: { command: string; reason: string | null }) => Promise<boolean>;
+	/**
+	 * More variables for the agent's commands, such as `PLAYWRIGHT_BROWSERS_PATH` when the app
+	 * installed the repository's Playwright browsers.
+	 */
+	env?: Record<string, string>;
 }
 
 /** One repository's working copy in a change across several. */
@@ -102,6 +116,7 @@ export function guidance(input: AgentRunInput) {
 			LONG_COMMANDS
 		].join('\n');
 	}
+	const playwright = input.env?.PLAYWRIGHT_BROWSERS_PATH ? [PLAYWRIGHT_READY] : [];
 	if (input.workingCopies && input.workingCopies.length > 1) {
 		const copies = input.workingCopies
 			.map(
@@ -117,7 +132,8 @@ export function guidance(input: AgentRunInput) {
 			'checks or tests in its folder when that is practical, and fix what your change breaks.',
 			'Do not commit, push, or open pull requests: the app does that after a person reviews your work.',
 			PULL_REQUESTS_FORMAT,
-			LONG_COMMANDS
+			LONG_COMMANDS,
+			...playwright
 		].join('\n');
 	}
 	return [
@@ -127,7 +143,8 @@ export function guidance(input: AgentRunInput) {
 		'Run the project’s existing checks or tests when that is practical, and fix what your change breaks.',
 		'Do not commit, push, or open pull requests: the app does that after a person reviews your work.',
 		PULL_REQUEST_FORMAT,
-		LONG_COMMANDS
+		LONG_COMMANDS,
+		...playwright
 	].join('\n');
 }
 

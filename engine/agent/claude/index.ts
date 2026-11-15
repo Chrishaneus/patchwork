@@ -180,7 +180,7 @@ export function createClaudeAgentRunner(
 			return { behavior: 'allow', updatedInput: toolInput };
 		};
 
-		const env = claudeEnv(input.apiKey);
+		const env = { ...claudeEnv(input.apiKey), ...input.env };
 
 		try {
 			const session = query({

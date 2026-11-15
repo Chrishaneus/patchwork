@@ -267,6 +267,7 @@ export function createGeminiAgentRunner(
 			],
 			env: {
 				...process.env,
+				...input.env,
 				GEMINI_CLI_HOME: home,
 				GEMINI_CLI_TRUST_WORKSPACE: 'true',
 				// It would otherwise start itself again with more memory.

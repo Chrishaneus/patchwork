@@ -275,6 +275,16 @@ Built in M5:
     checks still leave the task in review: you decide.
   - The command gets no app secrets (`ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `GH_TOKEN`,
     `PATCHWORK_TOKEN`).
+- **Playwright browsers** (`runs/test-browsers.ts`): the sandbox allows neither the browser
+  downloads (their hosts aren't on the list) nor writes to Playwright's shared cache. So before
+  the agent starts, for a working copy that uses Playwright for Node, the app reads its version
+  (lockfile: npm, pnpm, Yarn or Bun; else package.json, and only a plain version, so a lockfile
+  can't name another package) and runs `npx playwright@<version> install <browsers>` outside the
+  sandbox into `<app-data>/browsers`. Agents can read that folder but not write it, so one run
+  can't swap the browser a later one uses. A marker per version and set of browsers skips npx
+  next time. The agent (and its prompt) and the checks get `PLAYWRIGHT_BROWSERS_PATH`. A failed
+  install is logged and the run goes on. Not covered: Playwright for Python, and packages below
+  the repository's root.
   - Cancel and the time limit kill the whole process tree.
   - "Run checks again" re-runs the command on a task in review, for example after you fix it.
   - Worktrees start without installed dependencies, so include the install step in the command

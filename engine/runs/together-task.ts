@@ -134,6 +134,12 @@ export async function executeTogether(
 		});
 	}
 	if (signal.aborted) throw signal.reason;
+	// Playwright's browsers for each repository that uses it; all go in the same folder.
+	const env: Record<string, string> = {};
+	for (const [i, task] of run.tasks.entries()) {
+		Object.assign(env, await ctx.testBrowsersEnv(task.id, copies[i].path, signal));
+		if (signal.aborted) throw signal.reason;
+	}
 
 	for (const task of run.tasks) {
 		await ctx.updateTask(task.id, { status: 'running' });
@@ -158,7 +164,8 @@ export async function executeTogether(
 		signal,
 		log: (entry) => ctx.log(lead.id, entry),
 		requestApproval: (ask) => ctx.approvals.request(lead.id, ask, signal),
-		workingCopies: copies
+		workingCopies: copies,
+		env
 	});
 	if (signal.aborted) throw signal.reason;
 	// The cost and turns are the session's; they're kept on the first task.

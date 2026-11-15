@@ -196,6 +196,14 @@ pushing and opening pull requests stays with the app, after your review.
 - Claude Code has no sandbox on Windows. Without one, a warning shows in the task log and under **Settings → AI
   agent**, and only the command rules (no `git push`, no `gh pr`, …) stand in the way. Those
   rules are easy to get around, so they're a safety net, not a boundary.
+- **Playwright tests:** the sandbox can't download browsers, so when a repository uses
+  Playwright, Patchwork installs the browsers for its Playwright version before the agent starts
+  (Chromium, plus Firefox or WebKit if its config names them). They go into `browsers/` in the
+  app's data folder, which agents can read but not change, and the agent and the checks are
+  pointed at them. The first time takes about half a minute; after that it's instant. The
+  sandbox still can't reach services running on your machine (a database or an API in Docker),
+  so tests that need them ask to run outside it. The Docker image has Chromium's system
+  libraries; Firefox and WebKit tests need theirs added.
 
 Recent conversations are listed next to the chat. The old links (`/changes/new`, `/review`,
 `/explore`) open the Agent in the matching mode.
