@@ -100,9 +100,11 @@ export class RunsState {
 	}
 
 	async loadLog(taskId: string) {
-		const live = this.logs[taskId] ?? [];
+		// Set before asking, so entries that arrive as events while the request is in flight have a
+		// list to go in, and are kept below.
+		this.logs[taskId] ??= [];
 		const entries = await this.client.getTaskLog({ taskId });
-		// Keep entries that arrived as events while the request was in flight.
+		const live = this.logs[taskId] ?? [];
 		const key = (e: LogEntry) => `${e.at}|${e.text}`;
 		const known = Object.fromEntries(entries.map((e) => [key(e), true]));
 		this.logs[taskId] = [...entries, ...live.filter((e) => !known[key(e)])];

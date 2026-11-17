@@ -69,6 +69,16 @@ describe('RunsState', () => {
 		expect(state.logs.t1.map((e) => e.text)).toEqual(['first', 'Edit a.ts']);
 	});
 
+	it('keeps log lines that arrive while the log is first loading', async () => {
+		const { state, emit } = setup();
+		await state.load();
+		const loading = state.loadLog('t1');
+		emit({ type: 'task.log', taskId: 't1', entry: { at: '2', kind: 'info', text: 'Checked out' } });
+		await loading;
+
+		expect(state.logs.t1.map((e) => e.text)).toEqual(['first', 'Checked out']);
+	});
+
 	it('keeps action errors per task', async () => {
 		const { state } = setup();
 		await state.load();
