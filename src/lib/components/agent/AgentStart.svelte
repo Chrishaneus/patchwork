@@ -23,9 +23,11 @@
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import {
+		asksToAddressReview,
 		detectAgentMode,
 		findPullRequestLink,
 		findPullRequestLinks,
+		findPullRequestTarget,
 		type AgentMode
 	} from '#lib/engine/agent-mode.js';
 	import type { EngineClient } from '#lib/engine/client.js';
@@ -139,6 +141,8 @@
 			: [])
 	]);
 	const reviewReady = $derived(toReview.length > 0);
+	/** A change with one pull request link that asks to address its review goes to that pull request. */
+	const updatesPullRequest = $derived(links.length === 1 && asksToAddressReview(text));
 	const placeholder = $derived(
 		auto && !text.trim()
 			? m.agent_placeholder_auto()
@@ -199,6 +203,14 @@
 					pullRequests: toReview,
 					instruction: message || undefined,
 					attributes: rated
+				});
+				runId = run.id;
+			} else if (mode === 'change' && updatesPullRequest) {
+				// The change goes to the linked pull request, in its repository.
+				const run = await runs.start({
+					repositoryIds: [],
+					instruction: message,
+					pullRequest: findPullRequestTarget(message) ?? links[0]
 				});
 				runId = run.id;
 			} else {
@@ -347,6 +359,19 @@
 					<p class="text-sm font-medium">{m.review_attributes_label()}</p>
 					<ReviewAttributePicker bind:attributes bind:chosen />
 				</div>
+			</div>
+		</MobilePanel>
+	{:else if mode === 'change' && updatesPullRequest}
+		<MobilePanel
+			title={m.agent_panel_update_pull()}
+			summary={m.agent_review_link_short()}
+			testid="agent-update-pull"
+			class="order-1 flex flex-col lg:order-2"
+		>
+			<div class="flex flex-col gap-2 p-3">
+				<p class="hidden text-sm font-medium lg:block">{m.agent_panel_update_pull()}</p>
+				<p class="font-mono text-xs wrap-anywhere">{findPullRequestTarget(text) ?? links[0]}</p>
+				<p class="text-xs text-muted-foreground">{m.agent_update_pull_hint()}</p>
 			</div>
 		</MobilePanel>
 	{:else}

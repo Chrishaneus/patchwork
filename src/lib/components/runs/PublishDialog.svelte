@@ -6,7 +6,7 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
-	import type { Task } from '#lib/engine/contract.js';
+	import type { ReviewedPullRequest, Task } from '#lib/engine/contract.js';
 	import { engineErrorMessage } from '#lib/engine/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import type { RunsState } from '#lib/app/runs.svelte.js';
@@ -16,6 +16,7 @@
 		instruction,
 		remoteName,
 		provider,
+		updates,
 		runs
 	}: {
 		task: Task;
@@ -23,8 +24,13 @@
 		remoteName: string;
 		/** Where the pull request is opened; null when the branch is only pushed. */
 		provider: 'github' | 'gitlab' | null;
+		/** The pull request the change is pushed to, instead of opening one. */
+		updates?: ReviewedPullRequest;
 		runs: RunsState;
 	} = $props();
+	const pullLabel = $derived(
+		updates ? `${updates.provider === 'gitlab' ? '!' : '#'}${updates.number}` : ''
+	);
 
 	/** First line of the instruction, kept to a typical commit-subject length: the fallback title. */
 	function defaultTitle(text: string) {
@@ -67,9 +73,11 @@
 			<Button {...props} size="sm">
 				<GitPullRequestArrow />{task.publishError
 					? m.publish_retry()
-					: provider === 'gitlab'
-						? m.task_open_mr()
-						: m.task_open_pr()}
+					: updates
+						? m.task_push_to_pr({ number: pullLabel })
+						: provider === 'gitlab'
+							? m.task_open_mr()
+							: m.task_open_pr()}
 			</Button>
 		{/snippet}
 	</Dialog.Trigger>
@@ -78,30 +86,40 @@
 		<form class="grid gap-4" onsubmit={publish}>
 			<Dialog.Header>
 				<Dialog.Title
-					>{provider === 'gitlab' ? m.publish_title_gitlab() : m.publish_title()}</Dialog.Title
+					>{updates
+						? m.publish_title_update({ number: pullLabel })
+						: provider === 'gitlab'
+							? m.publish_title_gitlab()
+							: m.publish_title()}</Dialog.Title
 				>
 				<Dialog.Description>
-					{provider === 'github'
-						? m.publish_description({
+					{updates
+						? m.publish_description_update({
 								branch: task.branch,
 								remote: remoteName,
-								base: task.baseBranch
+								number: pullLabel
 							})
-						: provider === 'gitlab'
-							? m.publish_description_gitlab({
+						: provider === 'github'
+							? m.publish_description({
 									branch: task.branch,
 									remote: remoteName,
 									base: task.baseBranch
 								})
-							: m.publish_description_no_github({ branch: task.branch, remote: remoteName })}
+							: provider === 'gitlab'
+								? m.publish_description_gitlab({
+										branch: task.branch,
+										remote: remoteName,
+										base: task.baseBranch
+									})
+								: m.publish_description_no_github({ branch: task.branch, remote: remoteName })}
 				</Dialog.Description>
 			</Dialog.Header>
 			<div class="grid gap-2">
-				<Label for="pr-title">{m.publish_pr_title()}</Label>
+				<Label for="pr-title">{updates ? m.publish_commit_title() : m.publish_pr_title()}</Label>
 				<Input id="pr-title" bind:value={title} required />
 			</div>
 			<div class="grid gap-2">
-				<Label for="pr-body">{m.publish_pr_body()}</Label>
+				<Label for="pr-body">{updates ? m.publish_commit_body() : m.publish_pr_body()}</Label>
 				<!-- It grows with its text up to half the screen, then scrolls. -->
 				<Textarea
 					id="pr-body"
@@ -110,7 +128,7 @@
 					bind:value={body}
 				/>
 			</div>
-			{#if provider}
+			{#if provider && !updates}
 				<Label class="flex items-center gap-2 font-normal">
 					<Checkbox checked={draft} onCheckedChange={(v) => (draft = v === true)} />
 					{m.publish_draft()}
@@ -121,7 +139,7 @@
 			{/if}
 			<Dialog.Footer>
 				<Button type="submit" disabled={busy || !title.trim()}>
-					{busy ? m.publish_submitting() : m.publish_submit()}
+					{busy ? m.publish_submitting() : updates ? m.publish_submit_update() : m.publish_submit()}
 				</Button>
 			</Dialog.Footer>
 		</form>

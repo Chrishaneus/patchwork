@@ -122,4 +122,54 @@ describe('GitLab reviews', () => {
 		expect(gl.discussions).toEqual([]);
 		expect(gl.notes[0].body).toBe('Review. [not inline: src/app.ts:4]');
 	});
+
+	it('reads the open comments back to address, or the one thread a link points at', async () => {
+		const { gl, client } = await setup('h1');
+		await client.review('acme/api', 4, {
+			headSha: 'h1',
+			comments: [comment(), comment({ line: 9, startLine: 9, body: 'Done already.' })],
+			body
+		});
+		gl.discussions[1].resolved = true;
+		const all = await client.feedback('acme/api', 4);
+		expect(all).toEqual([
+			{ author: 'reviewer', body: 'Review.', path: null, line: null, replies: [] },
+			{ author: 'reviewer', body: comment().body, path: 'src/app.ts', line: 4, replies: [] }
+		]);
+		const one = await client.feedback('acme/api', 4, 'note_1001');
+		expect(one.map((f) => f.body)).toEqual(['Done already.']);
+	});
+});
+
+describe('GitHub review comments to address', () => {
+	it('reads one review, a thread, or everything, and tells forks apart', async () => {
+		const gh = await startFakeGitHub();
+		closers.push(gh.close);
+		const client = createGitHubClient({ apiUrl: gh.url, token: 'x' });
+		const post = (path: string, payload: unknown) =>
+			fetch(`${gh.url}${path}`, {
+				method: 'POST',
+				headers: { authorization: 'Bearer x', 'content-type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+		await post('/repos/acme/widgets/pulls', { title: 'Change', head: 'feature', base: 'main' });
+		await post('/repos/acme/widgets/pulls/1/reviews', {
+			body: 'First.',
+			comments: [{ path: 'a.ts', line: 2, body: 'Rename.' }]
+		});
+		await post('/repos/acme/widgets/pulls/1/reviews', { body: 'Second.', comments: [] });
+
+		expect(await client.feedback('acme/widgets', 1, 'pullrequestreview-2')).toEqual([
+			{ author: 'reviewer', body: 'Second.' }
+		]);
+		expect(
+			(await client.feedback('acme/widgets', 1, 'discussion_r1001')).map((f) => f.body)
+		).toEqual(['Rename.']);
+		expect((await client.feedback('acme/widgets', 1)).map((f) => f.body)).toEqual([
+			'First.',
+			'Second.',
+			'Rename.'
+		]);
+		expect((await client.get('acme/widgets', 1)).fromFork).toBe(false);
+	});
 });

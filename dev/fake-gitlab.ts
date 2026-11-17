@@ -29,6 +29,8 @@ export interface FakeGitLab {
 		iid: number;
 		body: string;
 		position: { new_path: string; new_line: number; head_sha: string };
+		/** Marked done; set by a test. */
+		resolved?: boolean;
 	}[];
 	setState: (project: string, iid: number, state: FakeMergeRequest['state']) => void;
 	close: () => Promise<void>;
@@ -56,6 +58,31 @@ export async function startFakeGitLab(): Promise<FakeGitLab> {
 		if (!req.headers['private-token']) return send(res, 401, { message: '401 Unauthorized' });
 		const project = decodeURIComponent(match[1]);
 
+		if (match[3] === '/discussions' && req.method === 'GET' && match[2]) {
+			// The comments, as GitLab lists them: each note its own thread, line comments resolvable.
+			const iid = Number(match[2]);
+			const author = { username: 'reviewer' };
+			return send(res, 200, [
+				...notes
+					.filter((n) => n.project === project && n.iid === iid)
+					.map((n) => ({ id: `n${n.id}`, notes: [{ id: n.id, body: n.body, author }] })),
+				...discussions
+					.filter((d) => d.project === project && d.iid === iid)
+					.map((d, i) => ({
+						id: `d${i + 1}`,
+						notes: [
+							{
+								id: 1000 + i,
+								body: d.body,
+								author,
+								resolvable: true,
+								resolved: !!d.resolved,
+								position: d.position
+							}
+						]
+					}))
+			]);
+		}
 		if (match[3]) {
 			if (req.method !== 'POST' || !match[2]) return send(res, 405, { message: 'Not allowed' });
 			const mr = mergeRequests.find((m) => m.project === project && m.iid === Number(match[2]));

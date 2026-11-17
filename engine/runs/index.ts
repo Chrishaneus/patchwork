@@ -27,7 +27,11 @@ import { performChecks } from './checks.js';
 import { executeCodeTask, switchPrompt } from './code-task.js';
 import { createRunContext, newTask, type RunServiceDeps } from './context.js';
 import { publishTask, postReview, syncPullRequests } from './publishing.js';
-import { findPullRequestsToReview, listPullRequests } from './pull-requests.js';
+import {
+	findPullRequestToUpdate,
+	findPullRequestsToReview,
+	listPullRequests
+} from './pull-requests.js';
 import { createTaskQueue, startTimeLimit, type TaskHandle } from './queue.js';
 import { dropWorkingCopy, executeReadOnlyTask } from './read-only-task.js';
 import { executeTogether } from './together-task.js';
@@ -216,10 +220,36 @@ export function createRunService(deps: RunServiceDeps) {
 			instruction: string;
 			branch?: string;
 			separately?: boolean;
+			pullRequest?: string;
 		}): Promise<Run> {
 			const instruction = input.instruction?.trim();
 			const ids = [...new Set(input.repositoryIds ?? [])];
 			if (!instruction) throw new EngineError('invalid_input', 'Describe the change first.');
+			if (input.pullRequest?.trim()) {
+				// On the pull request's own branch, in its repository, to address its review.
+				const { repo, pullRequest, feedback } = await findPullRequestToUpdate(
+					ctx,
+					input.pullRequest
+				);
+				const runId = randomUUID();
+				return queueRun({
+					id: runId,
+					kind: 'code',
+					instruction,
+					createdAt: new Date().toISOString(),
+					tasks: [
+						newTask({
+							id: randomUUID(),
+							runId,
+							repo,
+							branch: pullRequest.headRef,
+							baseBranch: pullRequest.baseRef
+						})
+					],
+					pullRequest,
+					reviewFeedback: feedback
+				});
+			}
 			if (ids.length === 0)
 				throw new EngineError('invalid_input', 'Choose at least one repository.');
 			const branchOverride = input.branch?.trim() || undefined;
@@ -550,11 +580,13 @@ export function createRunService(deps: RunServiceDeps) {
 				);
 			}
 			const repo = await ctx.findRepository(task.repositoryId);
-			const kind = (await ctx.findRun(task.runId))?.kind ?? 'code';
+			const run = await ctx.findRun(task.runId);
+			const kind = run?.kind ?? 'code';
 			if (task.worktreePath && repo) {
-				// Reviews and explorations never made a branch of their own.
-				if (kind === 'code') await removeWorktree(repo, task.worktreePath, task.branch);
-				else await removeWorktreeOnly(repo, task.worktreePath);
+				// Reviews, explorations and changes to a pull request never made a branch of their own.
+				if (kind === 'code' && !run?.pullRequest) {
+					await removeWorktree(repo, task.worktreePath, task.branch);
+				} else await removeWorktreeOnly(repo, task.worktreePath);
 			}
 			log(taskId, { kind: 'info', text: 'Discarded the worktree and branch.' });
 			return updateTask(taskId, { status: 'discarded', worktreePath: null });

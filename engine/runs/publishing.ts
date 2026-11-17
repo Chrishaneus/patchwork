@@ -60,7 +60,20 @@ export async function publishTask(ctx: RunContext, input: PublishInput): Promise
 		await ctx.updateTask(task.id, { commitSha, pushedAt });
 
 		let pullRequest: PullRequest | null = null;
-		if (provider) {
+		const existing = (await ctx.findRun(task.runId))?.pullRequest;
+		if (existing) {
+			// A change to a pull request: pushing its branch added the commit to it.
+			pullRequest = {
+				provider: existing.provider,
+				url: existing.url,
+				number: existing.number,
+				draft: false,
+				state: 'open',
+				syncedAt: pushedAt
+			};
+			const label = existing.provider === 'gitlab' ? `merge request !` : `pull request #`;
+			say(`Added the commit to ${label}${existing.number}: ${existing.url}`);
+		} else if (provider) {
 			pullRequest = await provider.openPullRequest({
 				slug: repo.slug!,
 				head: task.branch,

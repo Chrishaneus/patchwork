@@ -252,3 +252,65 @@ test('a question gets a read-only answer, not a branch', async ({ page }) => {
 	await expect(replyMode).toHaveCount(0);
 	await expect(page.getByRole('textbox', { name: 'Reply to the agent…' })).toBeVisible();
 });
+
+test('addresses a pull request’s review on its branch and pushes to it', async ({
+	page,
+	request
+}) => {
+	const number = await openPullRequest(request, 'needs-work', 'Add needs-work');
+	const posted = await request.post(`${FAKE_GITHUB}/repos/acme/gh-review/pulls/${number}/reviews`, {
+		headers: { authorization: 'Bearer e2e-token' },
+		data: {
+			body: 'Please add a changelog.',
+			event: 'COMMENT',
+			comments: [{ path: 'needs-work.txt', line: 1, body: 'Say what it is for.' }]
+		}
+	});
+	const reviewUrl = ((await posted.json()) as { html_url: string }).html_url;
+	const anchor = reviewUrl.slice(reviewUrl.indexOf('#'));
+
+	await page.goto('/agent');
+	const box = page.getByRole('textbox', { name: 'Message' });
+	const link = `https://github.com/acme/gh-review/pull/${number}${anchor}`;
+	await box.fill(`Can you address the reviews please\n\n${link}`);
+	const mode = page.getByTestId('agent-mode');
+	await expect(mode).toHaveAttribute('data-mode', 'change');
+	const panel = page.getByTestId('agent-update-pull');
+	await expect(panel).toContainText(link);
+	await box.press('Enter');
+
+	await expect(page).toHaveURL(/\/agent\/[0-9a-f-]+$/);
+	await expect(page.getByTestId('agent-task')).toHaveAttribute(
+		'data-task-status',
+		'awaiting_review'
+	);
+	await expect(page.getByTestId('agent-thread')).toContainText('Checked out needs-work at');
+
+	await page.getByRole('link', { name: 'Review & publish' }).click();
+	const task = page.getByTestId('task');
+	await task.getByRole('button', { name: `Push to #${number}` }).click();
+	const dialog = page.getByRole('dialog');
+	await expect(dialog.getByRole('heading')).toHaveText(`Push to #${number}`);
+	await expect(dialog.getByText('Open as a draft')).toHaveCount(0);
+	await dialog.getByLabel('Commit title').fill('Add a changelog for the review');
+	await dialog.getByRole('button', { name: 'Push', exact: true }).click();
+	await expect(task).toHaveAttribute('data-task-status', 'published');
+	await expect(task.getByTestId('task-log')).toContainText(
+		`Added the commit to pull request #${number}`
+	);
+
+	// The commit is on the pull request's branch, on top of its first commit; no new pull request.
+	const bare = path.resolve('.e2e/gh-review.git');
+	const log = execFileSync('git', ['log', '--format=%s', 'needs-work'], {
+		cwd: bare,
+		encoding: 'utf8'
+	});
+	expect(log.trim().split('\n').slice(0, 2)).toEqual(['Add a changelog for the review', 'Feature']);
+	const pulls = await request.get(
+		`${FAKE_GITHUB}/repos/acme/gh-review/pulls?head=acme:needs-work`,
+		{
+			headers: { authorization: 'Bearer e2e-token' }
+		}
+	);
+	expect(((await pulls.json()) as unknown[]).length).toBe(1);
+});

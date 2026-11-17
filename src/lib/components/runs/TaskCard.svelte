@@ -167,6 +167,7 @@
 					{instruction}
 					{runs}
 					{provider}
+					updates={code ? pullRequest : undefined}
 					remoteName={repository?.remoteName ?? 'origin'}
 				/>
 			{/if}

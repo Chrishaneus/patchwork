@@ -281,6 +281,53 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
 				: sendJson(res, 404, { message: 'Not Found' });
 		}
 
+		// API: GET a pull request's reviews, one review, its comments, all line comments, and the
+		// conversation (always empty here). Reviews are by "reviewer"; ids count from 1.
+		if (
+			parts[0] === 'repos' &&
+			['pulls', 'issues'].includes(parts[3]) &&
+			parts.length >= 6 &&
+			req.method === 'GET'
+		) {
+			if (!req.headers.authorization?.startsWith('Bearer ')) {
+				return sendJson(res, 401, { message: 'Requires authentication' });
+			}
+			const repo = `${parts[1]}/${parts[2]}`;
+			const number = Number(parts[4]);
+			if (parts[3] === 'issues') return sendJson(res, 200, []);
+			const mine = reviews
+				.map((r, i) => ({ ...r, id: i + 1 }))
+				.filter((r) => r.repo === repo && r.number === number);
+			const user = { login: 'reviewer' };
+			const toComments = (r: (typeof mine)[number]) =>
+				r.comments.map((c, j) => ({
+					id: r.id * 1000 + j + 1,
+					pull_request_review_id: r.id,
+					path: c.path,
+					line: c.line,
+					body: c.body,
+					user
+				}));
+			const toReview = (r: (typeof mine)[number]) => ({
+				id: r.id,
+				body: r.body,
+				state: 'COMMENTED',
+				html_url: r.html_url,
+				user
+			});
+			if (parts[5] === 'comments') return sendJson(res, 200, mine.flatMap(toComments));
+			if (parts[5] === 'reviews' && parts.length === 6)
+				return sendJson(res, 200, mine.map(toReview));
+			const review = mine.find((r) => r.id === Number(parts[6]));
+			if (parts[5] === 'reviews' && review && parts.length === 7) {
+				return sendJson(res, 200, toReview(review));
+			}
+			if (parts[5] === 'reviews' && review && parts[7] === 'comments') {
+				return sendJson(res, 200, toComments(review));
+			}
+			return sendJson(res, 404, { message: 'Not Found' });
+		}
+
 		// API: POST /repos/:owner/:repo/pulls/:number/reviews
 		if (
 			parts[0] === 'repos' &&

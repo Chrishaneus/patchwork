@@ -3,6 +3,7 @@ import {
 	detectAgentMode,
 	findPullRequestLink,
 	findPullRequestLinks,
+	findPullRequestTarget,
 	parseAgentMode
 } from './agent-mode';
 
@@ -41,9 +42,31 @@ describe('agent mode', () => {
 		['Add a changelog', 'change'],
 		['Upgrade eslint and fix the new lint errors', 'change'],
 		['Check the README for typos and fix them', 'change'],
-		['', 'change']
+		['', 'change'],
+		[
+			'Can you address the reviews please https://github.com/acme/web/pull/2#pullrequestreview-5',
+			'change'
+		],
+		['fix the comments on https://gitlab.com/g/p/-/merge_requests/3', 'change'],
+		['https://github.com/acme/web/pull/2 apply the suggestions', 'change'],
+		['review https://github.com/acme/api/pull/12 and comment on the errors', 'review']
 	])('detects %j as %s', (text, mode) => {
 		expect(detectAgentMode(text)).toBe(mode);
+	});
+
+	it('keeps what a pull request link points at, for addressing one review', () => {
+		expect(
+			findPullRequestTarget(
+				'address https://github.com/acme/web/pull/2#pullrequestreview-5909411963 please'
+			)
+		).toBe('https://github.com/acme/web/pull/2#pullrequestreview-5909411963');
+		expect(findPullRequestTarget('see https://github.com/acme/web/pull/2/files#r12')).toBe(
+			'https://github.com/acme/web/pull/2#r12'
+		);
+		expect(findPullRequestTarget('fix https://github.com/acme/web/pull/2.')).toBe(
+			'https://github.com/acme/web/pull/2'
+		);
+		expect(findPullRequestTarget('nothing here')).toBeNull();
 	});
 });
 

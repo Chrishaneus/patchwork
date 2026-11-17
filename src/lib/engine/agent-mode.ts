@@ -20,6 +20,27 @@ export function findPullRequestLinks(text: string): string[] {
 	return [...new Set([...text.matchAll(PULL_REQUEST_LINK)].map((m) => m[0]))];
 }
 
+/** "Address the reviews", "fix the comments", "apply the suggestions": work on the pull request. */
+const ADDRESS_REVIEW =
+	/\b(address|fix|apply|resolve|handle|implement|incorporate|act on|respond to|tackle)\b[\s\S]*\b(reviews?|comments?|feedback|suggestions?|requested changes|changes requested)\b/i;
+
+/** Whether a message with a pull request link asks to change it as its review asks. */
+export function asksToAddressReview(text: string): boolean {
+	return !!findPullRequestLink(text) && ADDRESS_REVIEW.test(text);
+}
+
+/**
+ * The first pull request link with what points into it, such as #pullrequestreview-12 (one
+ * review), #discussion_r34 (one thread) or GitLab's #note_56, which `findPullRequestLink` drops.
+ */
+export function findPullRequestTarget(text: string): string | null {
+	const link = findPullRequestLink(text);
+	if (!link) return null;
+	const at = text.indexOf(link);
+	const anchor = /^(?:\/[^\s#]*)?(#[\w-]+)/.exec(text.slice(at + link.length));
+	return link + (anchor?.[1] ?? '');
+}
+
 const REVIEW_REQUEST =
 	/\b(review|check|look\s+(at|over)|audit|rate|critique)\b[\s\S]*\b(pr|prs|pull request|merge request|mr|![0-9]+|#[0-9]+)\b/i;
 const EXPLORE_START =
@@ -37,6 +58,7 @@ const ASK = [
 
 /**
  * Guess what a message asks for, so the Agent can pick the mode itself:
+ * - a pull request link with "address/fix … the review" → a change to that pull request;
  * - a pull request link, or "review/check … PR #12" → review;
  * - "explore …", "how should we …", "what are the options …" → explore;
  * - a question about the code ("explain …", "what is …", "how does …") → ask;
@@ -44,6 +66,7 @@ const ASK = [
  */
 export function detectAgentMode(text: string): AgentMode {
 	if (!text.trim()) return 'change';
+	if (asksToAddressReview(text)) return 'change';
 	if (findPullRequestLink(text) || REVIEW_REQUEST.test(text)) return 'review';
 	if (EXPLORE_START.test(text) || EXPLORE_ANYWHERE.test(text)) return 'explore';
 	if (ASK.some((pattern) => pattern.test(text))) return 'ask';

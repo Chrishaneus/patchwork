@@ -131,6 +131,51 @@ export async function createWorktree(opts: {
 	return baseCommit;
 }
 
+/**
+ * Create an isolated worktree at the latest commit of a pull request's branch, to add to it.
+ * It's detached: no local branch is made or moved (yours may have the same name), and
+ * publishing pushes HEAD to the branch on the remote. Returns the commit it starts from.
+ */
+export async function createPullRequestWorktree(opts: {
+	repo: Repository;
+	/** The pull request's branch on the remote. */
+	branch: string;
+	worktreePath: string;
+	log: (text: string) => void;
+	authEnv?: Record<string, string>;
+}): Promise<string> {
+	const { repo, branch, worktreePath, log } = opts;
+	const tracking = `refs/remotes/${repo.remoteName}/${branch}`;
+	log(`Fetching ${repo.remoteName}/${branch}…`);
+	try {
+		await git(
+			repo.path,
+			['fetch', '--quiet', repo.remoteName, `+refs/heads/${branch}:${tracking}`],
+			{
+				timeoutMs: 60_000,
+				env: opts.authEnv
+			}
+		);
+	} catch (error) {
+		const stderr = (error as { stderr?: string }).stderr?.trim();
+		throw new EngineError(
+			'git_failed',
+			`Could not fetch the pull request’s branch ${branch}: ${stderr || 'git fetch failed'}`
+		);
+	}
+	const head = await git(repo.path, ['rev-parse', '--verify', `${tracking}^{commit}`]);
+	try {
+		await git(repo.path, ['worktree', 'add', '--quiet', '--detach', worktreePath, head]);
+	} catch (error) {
+		throw new EngineError(
+			'git_failed',
+			`Could not create the worktree: ${(error as Error).message}`
+		);
+	}
+	log(`Checked out ${branch} at ${head.slice(0, 8)} in ${worktreePath}`);
+	return head;
+}
+
 /** Everything changed in the worktree since `baseCommit`, including new and committed files. */
 export async function collectDiff(worktreePath: string, baseCommit: string): Promise<TaskDiff> {
 	// Mark new files as "intent to add" so they show up in the diff without staging content.

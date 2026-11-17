@@ -400,8 +400,13 @@ export interface Run {
 	 * session the first task runs. Without it, each repository has an agent of its own.
 	 */
 	together?: boolean;
-	/** Review runs: the pull request under review (the first one, when there are several). */
+	/**
+	 * Review runs: the pull request under review (the first one, when there are several). Code
+	 * runs: the pull request the change goes to, on its branch, to address its review.
+	 */
 	pullRequest?: ReviewedPullRequest;
+	/** Code runs on a pull request: its review comments when the run started, in Markdown. */
+	reviewFeedback?: string;
 	/** Review runs of several related pull requests, possibly in different repositories. */
 	pullRequests?: ReviewedPullRequest[];
 	/** Review runs: the attributes it was rated on. */
@@ -631,6 +636,11 @@ export interface EngineApi {
 		instruction: string;
 		branch?: string;
 		separately?: boolean;
+		/**
+		 * A pull request link: the change is made on its branch to address its review, and
+		 * publishing pushes to it. Its repository is used; `repositoryIds` can be empty.
+		 */
+		pullRequest?: string;
 	}): Promise<Run>;
 	listRuns(input: Record<string, never>): Promise<Run[]>;
 	getRun(input: { id: string }): Promise<Run>;

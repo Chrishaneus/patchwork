@@ -5,7 +5,7 @@ import {
 	type PullRequestSummary
 } from '#lib/engine/contract.js';
 import type { OpenPullRequestInput } from './github.js';
-import type { InlineComment, PostedReview, ReviewInput } from './index.js';
+import type { InlineComment, PostedReview, ReviewFeedback, ReviewInput } from './index.js';
 
 interface GitLabMergeRequest {
 	iid: number;
@@ -122,14 +122,57 @@ export function createGitLabClient(opts: { apiUrl: string; token: string }) {
 				target_branch: string;
 				source_branch: string;
 				sha?: string;
+				source_project_id?: number;
+				target_project_id?: number;
 			};
 			return {
 				title: mr.title,
 				url: mr.web_url,
 				baseRef: mr.target_branch,
 				headRef: mr.source_branch,
-				headSha: mr.sha ?? null
+				headSha: mr.sha ?? null,
+				fromFork:
+					mr.source_project_id !== undefined &&
+					mr.target_project_id !== undefined &&
+					mr.source_project_id !== mr.target_project_id
 			};
+		},
+
+		async feedback(slug: string, iid: number, anchor?: string | null) {
+			const res = await request(
+				'GET',
+				`${project(slug)}/merge_requests/${iid}/discussions?per_page=100`
+			);
+			if (res.status !== 200 || !Array.isArray(res.data)) {
+				throw new EngineError(
+					'gitlab_failed',
+					`GitLab couldn't read the comments on merge request !${iid} (${res.status}): ${describe(res.data)}`
+				);
+			}
+			type Note = {
+				id: number;
+				body: string;
+				system?: boolean;
+				resolvable?: boolean;
+				resolved?: boolean;
+				author?: { username?: string } | null;
+				position?: { new_path?: string; new_line?: number | null; old_path?: string } | null;
+			};
+			const discussions = (res.data as { notes?: Note[] }[])
+				.map((d) => (d.notes ?? []).filter((n) => !n.system))
+				.filter((notes) => notes.length > 0);
+			const note = /^note_(\d+)$/.exec(anchor ?? '');
+			const picked = note
+				? discussions.filter((notes) => notes.some((n) => n.id === Number(note[1])))
+				: // Resolved threads are done.
+					discussions.filter((notes) => !(notes[0].resolvable && notes[0].resolved));
+			return picked.map(([first, ...replies]): ReviewFeedback => ({
+				author: first.author?.username ?? null,
+				body: first.body,
+				path: first.position?.new_path ?? first.position?.old_path ?? null,
+				line: first.position?.new_line ?? null,
+				replies: replies.map((r) => ({ author: r.author?.username ?? null, body: r.body }))
+			}));
 		},
 
 		async listOpen(slug: string): Promise<PullRequestSummary[]> {

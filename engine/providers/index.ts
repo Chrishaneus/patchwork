@@ -31,7 +31,14 @@ export interface ProviderClient {
 		baseRef: string;
 		headRef: string;
 		headSha: string | null;
+		/** Its branch is in another repository (a fork), so it can't be pushed to from here. */
+		fromFork: boolean;
 	}>;
+	/**
+	 * The review comments on a pull request, to address: one review or thread when the link's
+	 * `anchor` names it (#pullrequestreview-1, #discussion_r2, #note_3), else all of them.
+	 */
+	feedback(slug: string, number: number, anchor?: string | null): Promise<ReviewFeedback[]>;
 	listOpen(slug: string): Promise<PullRequestSummary[]>;
 	comment(slug: string, number: number, body: string): Promise<string>;
 	/**
@@ -39,6 +46,16 @@ export interface ProviderClient {
 	 * comment, given the comments that couldn't go on their lines. Returns its link and those.
 	 */
 	review(slug: string, number: number, input: ReviewInput): Promise<PostedReview>;
+}
+
+/** A review comment on a pull request, with the replies in its thread. */
+export interface ReviewFeedback {
+	author: string | null;
+	body: string;
+	/** The file and line it's on; none for a review's main comment or the conversation. */
+	path?: string | null;
+	line?: number | null;
+	replies?: { author: string | null; body: string }[];
 }
 
 /** A comment on lines of a pull request's new version, its text ready for the provider. */

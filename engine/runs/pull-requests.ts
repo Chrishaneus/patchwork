@@ -1,6 +1,6 @@
 import { EngineError, type Repository, type ReviewedPullRequest } from '#lib/engine/contract.js';
 import { parseRemoteUrl } from '../git/git.js';
-import { providerFor } from '../providers/index.js';
+import { providerFor, type ReviewFeedback } from '../providers/index.js';
 import type { RunContext } from './context.js';
 import { parsePullRequestUrl } from './workflows.js';
 
@@ -105,4 +105,66 @@ export async function findPullRequestsToReview(
 		if (!found.some((f) => f.pullRequest.url === next.pullRequest.url)) found.push(next);
 	}
 	return found;
+}
+
+/** At most this much review text in the prompt; a long review is cut, with a note. */
+const MAX_FEEDBACK = 40_000;
+
+/** Review comments as Markdown for the agent: who, where, what, and the replies. */
+export function feedbackMarkdown(items: ReviewFeedback[]): string {
+	const quote = (text: string) =>
+		text
+			.trim()
+			.split('\n')
+			.map((line) => `> ${line}`)
+			.join('\n');
+	const text = items
+		.map((item, i) => {
+			const where = item.path ? ` on \`${item.path}\`${item.line ? ` line ${item.line}` : ''}` : '';
+			const replies = (item.replies ?? []).map(
+				(r) => `Reply from ${r.author ?? 'someone'}:\n\n${quote(r.body)}`
+			);
+			return [
+				`${i + 1}. ${item.author ?? 'A reviewer'}${where}:`,
+				quote(item.body),
+				...replies
+			].join('\n\n');
+		})
+		.join('\n\n');
+	return text.length > MAX_FEEDBACK
+		? `${text.slice(0, MAX_FEEDBACK)}\n\n(The review is longer; the rest was left out.)`
+		: text;
+}
+
+/**
+ * The pull request a change goes to, to address its review: its repository (added if needed),
+ * its branches, and its review comments (one review or thread if the link points at it).
+ * Refuses a pull request from a fork, whose branch can't be pushed to, and one without comments.
+ */
+export async function findPullRequestToUpdate(ctx: RunContext, url: string) {
+	const { repo, number } = await repositoryForPullRequest(ctx, url);
+	const { provider, slug } = await providerOf(ctx, repo);
+	const details = await provider.get(slug, number);
+	const label = provider.kind === 'gitlab' ? `Merge request !${number}` : `Pull request #${number}`;
+	if (details.fromFork) {
+		throw new EngineError(
+			'invalid_pull_request',
+			`${label} comes from a fork, so its branch can’t be pushed to from here.`
+		);
+	}
+	const anchor = new URL(url.trim()).hash.replace(/^#/, '') || null;
+	const feedback = await provider.feedback(slug, number, anchor);
+	if (feedback.length === 0) {
+		throw new EngineError('invalid_pull_request', `${label} has no review comments to address.`);
+	}
+	const pullRequest: ReviewedPullRequest = {
+		provider: provider.kind,
+		url: details.url,
+		number,
+		title: details.title,
+		baseRef: details.baseRef,
+		headRef: details.headRef,
+		repositoryId: repo.id
+	};
+	return { repo, pullRequest, feedback: feedbackMarkdown(feedback) };
 }

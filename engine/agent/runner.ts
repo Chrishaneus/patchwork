@@ -39,6 +39,18 @@ export const PULL_REQUEST_FORMAT = [
 	'"generated with" footer.'
 ].join('\n');
 
+/**
+ * The same for a change added to an existing pull request: a commit on it, read the same way
+ * (`splitTitle`) and offered when pushing.
+ */
+export const COMMIT_FORMAT = [
+	'Your last message is the commit that adds your change to the pull request, and nothing else. Its first line is',
+	'"Title: " and the commit subject: what the change does, under 72 characters, in the style of the repository’s',
+	'recent commit subjects (see `git log --format=%s -15`). Then a blank line and, for the reviewers, what you',
+	'changed for each review comment, and why you left any of them as they were. No signature or "generated with"',
+	'footer.'
+].join('\n');
+
 const LONG_COMMANDS = [
 	'Commands such as installs, builds and test runs can take several minutes and print nothing for',
 	'a long time. Wait for them to finish instead of stopping or restarting them.'
@@ -84,6 +96,8 @@ export interface AgentRunInput {
 	 * installed the repository's Playwright browsers.
 	 */
 	env?: Record<string, string>;
+	/** A change to an existing pull request (on its branch, `branch`), to address its review. */
+	pullRequest?: { provider: 'github' | 'gitlab'; number: number };
 }
 
 /** One repository's working copy in a change across several. */
@@ -132,6 +146,22 @@ export function guidance(input: AgentRunInput) {
 			'checks or tests in its folder when that is practical, and fix what your change breaks.',
 			'Do not commit, push, or open pull requests: the app does that after a person reviews your work.',
 			PULL_REQUESTS_FORMAT,
+			LONG_COMMANDS,
+			...playwright
+		].join('\n');
+	}
+	if (input.pullRequest) {
+		const label =
+			input.pullRequest.provider === 'gitlab'
+				? `merge request !${input.pullRequest.number}`
+				: `pull request #${input.pullRequest.number}`;
+		return [
+			`You are working in an isolated git worktree of the repository "${input.repository.slug ?? input.repository.name}",`,
+			`at the latest commit of the branch "${input.branch}" of ${label}, which goes into "${input.baseBranch}".`,
+			'Address its review as the user asks, following the conventions already used in the repository.',
+			'Run the project’s existing checks or tests when that is practical, and fix what your change breaks.',
+			'Do not commit, push, or comment on the pull request: the app adds your change to it after a person reviews it.',
+			COMMIT_FORMAT,
 			LONG_COMMANDS,
 			...playwright
 		].join('\n');

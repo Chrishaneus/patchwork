@@ -1,12 +1,33 @@
 import path from 'node:path';
 import { PULL_REQUEST_FORMAT } from '../agent/runner.js';
 import type { Repository, Run, Task } from '#lib/engine/contract.js';
-import { collectDiff, createWorktree } from '../git/worktrees.js';
+import { collectDiff, createPullRequestWorktree, createWorktree } from '../git/worktrees.js';
 import { performChecks } from './checks.js';
 import { addUsage, type RunContext } from './context.js';
 
+/**
+ * The first prompt for a change to a pull request: what the person asked, then its review
+ * comments, fetched when the run started.
+ */
+export function pullRequestPrompt(run: Run): string {
+	const pr = run.pullRequest!;
+	const label =
+		pr.provider === 'gitlab' ? `merge request !${pr.number}` : `pull request #${pr.number}`;
+	return [
+		run.instruction,
+		`This is about ${label}, "${pr.title}" (${pr.url}). You are on its branch. Its review comments:`,
+		run.reviewFeedback ?? '(none)',
+		'Make the changes they ask for, as far as the request above goes. Some may already be done in the code, or no longer apply; check the code first, and skip those. If you disagree with a comment, leave the code as it is and say why in the commit description.'
+	].join('\n\n');
+}
+
 /** The prompt for a follow-up: what was asked and done so far, then the new instruction. */
-export function followUpPrompt(instruction: string, task: Task, followUp: string): string {
+export function followUpPrompt(
+	instruction: string,
+	task: Task,
+	followUp: string,
+	run?: Run
+): string {
 	const parts = [`You already worked on this request in this working copy:\n\n${instruction}`];
 	const earlier = (task.followUps ?? []).slice(0, -1);
 	if (earlier.length > 0) {
@@ -20,7 +41,9 @@ export function followUpPrompt(instruction: string, task: Task, followUp: string
 	}
 	parts.push(`Now do this as well:\n\n${followUp}`);
 	parts.push(
-		'When you finish, write the pull request again for the complete change, the earlier work included.'
+		run?.pullRequest
+			? 'When you finish, write the commit again for the complete change, the earlier work included.'
+			: 'When you finish, write the pull request again for the complete change, the earlier work included.'
 	);
 	return parts.join('\n\n');
 }
@@ -109,7 +132,8 @@ export async function executeCodeTask(
 		const source = await ctx.prepareSource(repo, say);
 		if (signal.aborted) throw signal.reason;
 		worktreePath = path.join(ctx.deps.worktreesDir, taskId);
-		baseCommit = await createWorktree({
+		// A change to a pull request starts from its branch's latest commit, without a branch of its own.
+		baseCommit = await (run.pullRequest ? createPullRequestWorktree : createWorktree)({
 			repo: source,
 			branch: task.branch,
 			worktreePath,
@@ -127,13 +151,15 @@ export async function executeCodeTask(
 	const apiKey = await ctx.deps.getApiKey(input.model);
 	// A cancel can land while we were getting ready; don't start the agent then.
 	if (signal.aborted) throw signal.reason;
+	const original = run.pullRequest ? pullRequestPrompt(run) : run.instruction;
 	const result = await ctx.deps.runAgent({
 		cwd: worktreePath,
 		instruction:
 			switched ??
-			(followUp
-				? followUpPrompt(run.instruction, await ctx.findTask(taskId), followUp)
-				: run.instruction),
+			(followUp ? followUpPrompt(original, await ctx.findTask(taskId), followUp, run) : original),
+		...(run.pullRequest
+			? { pullRequest: { provider: run.pullRequest.provider, number: run.pullRequest.number } }
+			: {}),
 		repository: repo,
 		branch: task.branch,
 		baseBranch: task.baseBranch,

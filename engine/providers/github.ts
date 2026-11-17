@@ -4,7 +4,7 @@ import {
 	type PullRequestState,
 	type PullRequestSummary
 } from '#lib/engine/contract.js';
-import type { InlineComment, PostedReview, ReviewInput } from './index.js';
+import type { InlineComment, PostedReview, ReviewFeedback, ReviewInput } from './index.js';
 
 export interface OpenPullRequestInput {
 	/** `owner/name` */
@@ -130,16 +130,92 @@ export function createGitHubClient(opts: { apiUrl: string; token: string }) {
 			const pr = res.data as {
 				title: string;
 				html_url: string;
-				base: { ref: string };
-				head: { ref: string; sha?: string };
+				base: { ref: string; repo?: { full_name: string } | null };
+				head: { ref: string; sha?: string; repo?: { full_name: string } | null };
 			};
+			const head = pr.head.repo;
+			const base = pr.base.repo;
 			return {
 				title: pr.title,
 				url: pr.html_url,
 				baseRef: pr.base.ref,
 				headRef: pr.head.ref,
-				headSha: pr.head.sha ?? null
+				headSha: pr.head.sha ?? null,
+				// A null head repository is a fork that was deleted.
+				fromFork:
+					head === null ||
+					(!!head && !!base && head.full_name.toLowerCase() !== base.full_name.toLowerCase())
 			};
+		},
+
+		async feedback(slug: string, number: number, anchor?: string | null) {
+			const list = async <T>(path: string): Promise<T[]> => {
+				const res = await request('GET', path);
+				if (res.status !== 200 || !Array.isArray(res.data)) {
+					throw new EngineError(
+						'github_failed',
+						`GitHub couldn't read the review of pull request #${number} (${res.status}): ${describe(res.data)}`
+					);
+				}
+				return res.data as T[];
+			};
+			type Comment = {
+				id: number;
+				in_reply_to_id?: number;
+				path?: string;
+				line?: number | null;
+				original_line?: number | null;
+				body: string;
+				user?: { login?: string } | null;
+			};
+			type Review = { body?: string | null; user?: { login?: string } | null };
+			const author = (c: { user?: { login?: string } | null }) => c.user?.login ?? null;
+			// Threads: comments that don't reply to one in the list, each with its replies.
+			const threads = (comments: Comment[]): ReviewFeedback[] => {
+				const ids = new Set(comments.map((c) => c.id));
+				return comments
+					.filter((c) => !c.in_reply_to_id || !ids.has(c.in_reply_to_id))
+					.map((c) => ({
+						author: author(c),
+						body: c.body,
+						path: c.path ?? null,
+						// No line when the code it was on has changed since.
+						line: c.line ?? c.original_line ?? null,
+						replies: comments
+							.filter((r) => r.in_reply_to_id === c.id)
+							.map((r) => ({ author: author(r), body: r.body }))
+					}));
+			};
+			const main = (reviews: Review[]): ReviewFeedback[] =>
+				reviews
+					.filter((r) => r.body?.trim())
+					.map((r) => ({ author: author(r), body: r.body!.trim() }));
+			const pull = `/repos/${slug}/pulls/${number}`;
+
+			const review = /^pullrequestreview-(\d+)$/.exec(anchor ?? '');
+			if (review) {
+				const res = await request('GET', `${pull}/reviews/${review[1]}`);
+				if (res.status !== 200) {
+					throw new EngineError(
+						'invalid_pull_request',
+						`GitHub couldn't find that review on pull request #${number} (${res.status}).`
+					);
+				}
+				const comments = await list<Comment>(`${pull}/reviews/${review[1]}/comments?per_page=100`);
+				return [...main([res.data as Review]), ...threads(comments)];
+			}
+			const comments = await list<Comment>(`${pull}/comments?per_page=100`);
+			const thread = /^discussion_r(\d+)$/.exec(anchor ?? '');
+			if (thread) {
+				const picked = comments.find((c) => c.id === Number(thread[1]));
+				const root = picked?.in_reply_to_id ?? Number(thread[1]);
+				return threads(comments.filter((c) => c.id === root || c.in_reply_to_id === root));
+			}
+			const reviews = await list<Review>(`${pull}/reviews?per_page=100`);
+			const conversation = await list<Review>(
+				`/repos/${slug}/issues/${number}/comments?per_page=100`
+			);
+			return [...main(reviews), ...threads(comments), ...main(conversation)];
 		},
 
 		/** Open pull requests, newest first. */
