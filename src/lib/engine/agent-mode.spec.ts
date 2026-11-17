@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+	asksToAddressReview,
+	asksToSquash,
 	detectAgentMode,
 	findPullRequestLink,
 	findPullRequestLinks,
@@ -49,9 +51,24 @@ describe('agent mode', () => {
 		],
 		['fix the comments on https://gitlab.com/g/p/-/merge_requests/3', 'change'],
 		['https://github.com/acme/web/pull/2 apply the suggestions', 'change'],
-		['review https://github.com/acme/api/pull/12 and comment on the errors', 'review']
+		['review https://github.com/acme/api/pull/12 and comment on the errors', 'review'],
+		['Can you squash the commits for https://github.com/acme/web/pull/2 please', 'change'],
+		['https://gitlab.com/g/p/-/merge_requests/3 squash it', 'change'],
+		['Rename the login helper to signIn in https://github.com/acme/web/pull/2', 'change'],
+		['https://github.com/acme/web/pull/2 add tests for the parser', 'change'],
+		['check https://github.com/acme/web/pull/2 and fix what you find', 'review'],
+		['https://github.com/acme/update-docs/pull/2', 'review'],
+		['what do you think of https://github.com/acme/web/pull/2', 'review']
 	])('detects %j as %s', (text, mode) => {
 		expect(detectAgentMode(text)).toBe(mode);
+	});
+
+	it('tells a squash from addressing the review', () => {
+		const squash = 'Can you squash the commits for https://github.com/acme/web/pull/2 please';
+		expect(asksToSquash(squash)).toBe(true);
+		expect(asksToAddressReview(squash)).toBe(false);
+		expect(asksToSquash('squash the commits of the login branch')).toBe(false);
+		expect(asksToSquash('review https://github.com/acme/web/pull/2')).toBe(false);
 	});
 
 	it('keeps what a pull request link points at, for addressing one review', () => {

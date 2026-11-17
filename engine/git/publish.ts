@@ -56,15 +56,28 @@ export async function pushBranch(opts: {
 	branch: string;
 	/** Extra git config for HTTPS credentials (see providerAuthEnv); Docker has no others. */
 	authEnv?: Record<string, string>;
+	/**
+	 * Replace the branch's commits (a squash), but only while the branch on the remote is still
+	 * at this commit: anything pushed since is never overwritten.
+	 */
+	replacing?: string;
 }) {
+	const ref = `refs/heads/${opts.branch}`;
+	const lease = opts.replacing ? [`--force-with-lease=${ref}:${opts.replacing}`] : [];
 	try {
 		await git(
 			opts.worktreePath,
-			['push', '--quiet', '-u', opts.repo.remoteName, `HEAD:refs/heads/${opts.branch}`],
+			['push', '--quiet', '-u', ...lease, opts.repo.remoteName, `HEAD:${ref}`],
 			{ timeoutMs: 120_000, env: opts.authEnv }
 		);
 	} catch (error) {
 		const stderr = (error as { stderr?: string }).stderr?.trim();
+		if (opts.replacing && /stale info|fetch first|non-fast-forward/.test(stderr ?? '')) {
+			throw new EngineError(
+				'push_failed',
+				`${opts.branch} on ${opts.repo.remoteName} has commits that weren’t squashed, so nothing was replaced. Discard this change and squash again.`
+			);
+		}
 		// Only git's own output: the error message would include the command line.
 		throw new EngineError(
 			'push_failed',

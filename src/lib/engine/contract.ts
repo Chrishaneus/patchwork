@@ -210,6 +210,12 @@ export interface Task {
 	baseBranch: string;
 	/** Commit the branch started from; the diff is taken against it. */
 	baseCommit: string | null;
+	/**
+	 * A squash of a pull request's commits: the branch's latest commit, which the squashed one
+	 * replaces. `baseCommit` is where the branch started, and the push is refused if the branch
+	 * moved on from this one.
+	 */
+	squashedFrom?: string | null;
 	worktreePath: string | null;
 	startedAt: string | null;
 	finishedAt: string | null;
@@ -407,11 +413,16 @@ export interface Run {
 	together?: boolean;
 	/**
 	 * Review runs: the pull request under review (the first one, when there are several). Code
-	 * runs: the pull request the change goes to, on its branch, to address its review.
+	 * runs: the pull request the change goes to, on its branch.
 	 */
 	pullRequest?: ReviewedPullRequest;
-	/** Code runs on a pull request: its review comments when the run started, in Markdown. */
+	/**
+	 * Code runs on a pull request asked to address its review: its review comments when the run
+	 * started, in Markdown.
+	 */
 	reviewFeedback?: string;
+	/** Code runs on a pull request: squash its commits into one (see `Task.squashedFrom`). */
+	squash?: boolean;
 	/** Review runs of several related pull requests, possibly in different repositories. */
 	pullRequests?: ReviewedPullRequest[];
 	/** Review runs: the attributes it was rated on. */
@@ -642,10 +653,16 @@ export interface EngineApi {
 		branch?: string;
 		separately?: boolean;
 		/**
-		 * A pull request link: the change is made on its branch to address its review, and
-		 * publishing pushes to it. Its repository is used; `repositoryIds` can be empty.
+		 * A pull request link: the change is made on its branch, and publishing pushes to it. Its
+		 * repository is used; `repositoryIds` can be empty. When the instruction asks to address its
+		 * review, the agent gets its review comments (and there must be some).
 		 */
 		pullRequest?: string;
+		/**
+		 * With `pullRequest`: squash its commits into one. The agent writes the commit message, and
+		 * publishing replaces the branch's commits with it.
+		 */
+		squash?: boolean;
 	}): Promise<Run>;
 	listRuns(input: Record<string, never>): Promise<Run[]>;
 	getRun(input: { id: string }): Promise<Run>;

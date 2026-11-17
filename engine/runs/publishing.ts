@@ -49,14 +49,26 @@ export async function publishTask(ctx: RunContext, input: PublishInput): Promise
 			message: body ? `${title}\n\n${body}` : title
 		});
 		say(`Committed ${commitSha.slice(0, 8)}.`);
+		// A squash replaces the branch's commits while it's still where it was squashed from; once
+		// pushed, a retry or a follow-up's commit goes on top of what was pushed.
+		const replacing = task.squashedFrom
+			? task.pushedAt && task.commitSha
+				? task.commitSha
+				: task.squashedFrom
+			: undefined;
 		await pushBranch({
 			worktreePath,
 			repo,
 			branch: task.branch,
-			authEnv: providerAuthEnv(repo.remoteUrl, provider?.kind ?? null, provider?.token ?? null)
+			authEnv: providerAuthEnv(repo.remoteUrl, provider?.kind ?? null, provider?.token ?? null),
+			replacing
 		});
 		const pushedAt = new Date().toISOString();
-		say(`Pushed ${task.branch} to ${repo.remoteName}.`);
+		say(
+			replacing && replacing === task.squashedFrom
+				? `Replaced the commits of ${task.branch} on ${repo.remoteName} with ${commitSha.slice(0, 8)}.`
+				: `Pushed ${task.branch} to ${repo.remoteName}.`
+		);
 		await ctx.updateTask(task.id, { commitSha, pushedAt });
 
 		let pullRequest: PullRequest | null = null;
@@ -72,7 +84,11 @@ export async function publishTask(ctx: RunContext, input: PublishInput): Promise
 				syncedAt: pushedAt
 			};
 			const label = existing.provider === 'gitlab' ? `merge request !` : `pull request #`;
-			say(`Added the commit to ${label}${existing.number}: ${existing.url}`);
+			say(
+				task.squashedFrom
+					? `Squashed the commits of ${label}${existing.number}: ${existing.url}`
+					: `Added the commit to ${label}${existing.number}: ${existing.url}`
+			);
 			// Only once the push went through, so the reply never speaks of changes that aren't there.
 			// If it's refused, publishing fails and can be retried: the push is then a no-op.
 			const reply = input.reply?.trim();

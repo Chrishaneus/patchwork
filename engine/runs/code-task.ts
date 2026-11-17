@@ -1,24 +1,67 @@
 import path from 'node:path';
 import { PULL_REQUEST_FORMAT } from '../agent/runner.js';
 import type { Repository, Run, Task } from '#lib/engine/contract.js';
-import { collectDiff, createPullRequestWorktree, createWorktree } from '../git/worktrees.js';
+import { tryGit } from '../git/git.js';
+import {
+	collectDiff,
+	createPullRequestWorktree,
+	createSquashWorktree,
+	createWorktree
+} from '../git/worktrees.js';
 import { performChecks } from './checks.js';
 import { addUsage, type RunContext } from './context.js';
 
+/** The messages of the commits a squash replaces, oldest first; empty when it isn't one. */
+async function squashedMessages(
+	worktreePath: string,
+	baseCommit: string,
+	head: string | null | undefined
+): Promise<string[]> {
+	if (!head) return [];
+	const log = await tryGit(worktreePath, [
+		'log',
+		'--reverse',
+		'--format=%B%x00',
+		`${baseCommit}..${head}`
+	]);
+	return (log ?? '')
+		.split('\0')
+		.map((message) => message.trim())
+		.filter(Boolean);
+}
+
 /**
- * The first prompt for a change to a pull request: what the person asked, then its review
- * comments, fetched when the run started.
+ * The first prompt for a change to a pull request: what the person asked, then, for a squash,
+ * the messages of its commits, and its review comments when there are some to address.
  */
-export function pullRequestPrompt(run: Run): string {
+export function pullRequestPrompt(run: Run, squashed: string[] = []): string {
 	const pr = run.pullRequest!;
 	const label =
 		pr.provider === 'gitlab' ? `merge request !${pr.number}` : `pull request #${pr.number}`;
-	return [
-		run.instruction,
-		`This is about ${label}, "${pr.title}" (${pr.url}). You are on its branch. Its review comments:`,
-		run.reviewFeedback ?? '(none)',
-		'Make the changes they ask for, as far as the request above goes. Some may already be done in the code, or no longer apply; check the code first, and skip those. If you disagree with a comment, leave the code as it is and say why in the commit description.'
-	].join('\n\n');
+	const parts = [run.instruction];
+	if (run.squash) {
+		parts.push(
+			`This is about ${label}, "${pr.title}" (${pr.url}). Its commits are being squashed into one: the working copy is at the commit its branch started from, with the changes of all its commits in place, uncommitted. Their messages, oldest first:`,
+			squashed.length > 0
+				? squashed.map((message, i) => `${i + 1}.\n\n${message}`).join('\n\n')
+				: '(unknown)',
+			run.reviewFeedback
+				? 'The squashed commit’s message must describe the whole change, not each commit. Its review comments are below.'
+				: 'Write the message of the squashed commit: what the whole change does and why, not a list of the commits. Leave the files as they are, unless the request above asks for more than the squash.'
+		);
+	} else {
+		parts.push(
+			`This is about ${label}, "${pr.title}" (${pr.url}). You are on its branch, at its latest commit; your change is added to it as a new commit.`
+		);
+	}
+	if (run.reviewFeedback) {
+		parts.push(
+			'Its review comments:',
+			run.reviewFeedback,
+			'Make the changes they ask for, as far as the request above goes. Some may already be done in the code, or no longer apply; check the code first, and skip those. If you disagree with a comment, leave the code as it is and say why in the commit description.'
+		);
+	}
+	return parts.join('\n\n');
 }
 
 /** The prompt for a follow-up: what was asked and done so far, then the new instruction. */
@@ -132,15 +175,23 @@ export async function executeCodeTask(
 		const source = await ctx.prepareSource(repo, say);
 		if (signal.aborted) throw signal.reason;
 		worktreePath = path.join(ctx.deps.worktreesDir, taskId);
-		// A change to a pull request starts from its branch's latest commit, without a branch of its own.
-		baseCommit = await (run.pullRequest ? createPullRequestWorktree : createWorktree)({
+		const prepare = {
 			repo: source,
 			branch: task.branch,
 			worktreePath,
 			log: say,
 			authEnv: await ctx.authEnvFor(repo)
-		});
-		await ctx.updateTask(taskId, { worktreePath, baseCommit });
+		};
+		if (run.pullRequest && run.squash) {
+			// A squash starts where the pull request's branch started, with all its changes staged.
+			const squashed = await createSquashWorktree({ ...prepare, baseBranch: task.baseBranch });
+			baseCommit = squashed.baseCommit;
+			await ctx.updateTask(taskId, { worktreePath, baseCommit, squashedFrom: squashed.head });
+		} else {
+			// A change to a pull request starts from its branch's latest commit, without a branch of its own.
+			baseCommit = await (run.pullRequest ? createPullRequestWorktree : createWorktree)(prepare);
+			await ctx.updateTask(taskId, { worktreePath, baseCommit });
+		}
 	}
 	if (signal.aborted) throw signal.reason;
 	// Every time, as a follow-up may have changed the Playwright version; quick once installed.
@@ -151,14 +202,22 @@ export async function executeCodeTask(
 	const apiKey = await ctx.deps.getApiKey(input.model);
 	// A cancel can land while we were getting ready; don't start the agent then.
 	if (signal.aborted) throw signal.reason;
-	const original = run.pullRequest ? pullRequestPrompt(run) : run.instruction;
+	const current = await ctx.findTask(taskId);
+	const original = run.pullRequest
+		? pullRequestPrompt(run, await squashedMessages(worktreePath, baseCommit, current.squashedFrom))
+		: run.instruction;
 	const result = await ctx.deps.runAgent({
 		cwd: worktreePath,
 		instruction:
-			switched ??
-			(followUp ? followUpPrompt(original, await ctx.findTask(taskId), followUp, run) : original),
+			switched ?? (followUp ? followUpPrompt(original, current, followUp, run) : original),
 		...(run.pullRequest
-			? { pullRequest: { provider: run.pullRequest.provider, number: run.pullRequest.number } }
+			? {
+					pullRequest: {
+						provider: run.pullRequest.provider,
+						number: run.pullRequest.number,
+						...(run.squash ? { squash: true } : {})
+					}
+				}
 			: {}),
 		repository: repo,
 		branch: task.branch,

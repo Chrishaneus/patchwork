@@ -325,3 +325,53 @@ test('addresses a pull request’s review on its branch and pushes to it', async
 	);
 	expect(((await pulls.json()) as unknown[]).length).toBe(1);
 });
+
+test('squashes a pull request’s commits into one and replaces them', async ({ page, request }) => {
+	const number = await openPullRequest(request, 'two-commits', 'Add two-commits');
+	// A second commit on the pull request's branch.
+	const bare = path.resolve('.e2e/gh-review.git');
+	const work = mkdtempSync(path.join(tmpdir(), 'e2e-squash-'));
+	const git = (...args: string[]) => execFileSync('git', args, { cwd: work, encoding: 'utf8' });
+	git('clone', '-q', '--branch', 'two-commits', bare, '.');
+	writeFileSync(path.join(work, 'two-commits.txt'), 'A new two-commits, better\n');
+	git('-c', 'user.email=dev@example.com', '-c', 'user.name=Dev', 'commit', '-qam', 'Better');
+	git('push', '-q', 'origin', 'two-commits');
+	const started = git('merge-base', 'origin/main', 'HEAD').trim();
+	rmSync(work, { recursive: true, force: true });
+
+	await page.goto('/agent');
+	const box = page.getByRole('textbox', { name: 'Message' });
+	const link = `https://github.com/acme/gh-review/pull/${number}`;
+	await box.fill(`Can you squash the commits for ${link} please`);
+	await expect(page.getByTestId('agent-mode')).toHaveAttribute('data-mode', 'change');
+	await expect(page.getByTestId('agent-update-pull')).toContainText('squashes');
+	await box.press('Enter');
+
+	await expect(page).toHaveURL(/\/agent\/[0-9a-f-]+$/);
+	await expect(page.getByTestId('agent-task')).toHaveAttribute(
+		'data-task-status',
+		'awaiting_review'
+	);
+	await expect(page.getByTestId('agent-thread')).toContainText('Squashed 2 commits of two-commits');
+
+	await page.getByRole('link', { name: 'Review & publish' }).click();
+	const task = page.getByTestId('task');
+	await task.getByRole('button', { name: `Squash #${number}` }).click();
+	const dialog = page.getByRole('dialog');
+	await expect(dialog.getByRole('heading')).toHaveText(`Squash #${number}`);
+	// No reply unless you tick it.
+	await expect(dialog.getByRole('textbox', { name: `Reply on #${number}` })).toHaveCount(0);
+	await dialog.getByLabel('Commit title').fill('Add two-commits');
+	await dialog.getByRole('button', { name: 'Squash and push' }).click();
+	await expect(task).toHaveAttribute('data-task-status', 'published');
+	await expect(task.getByTestId('task-log')).toContainText(
+		`Squashed the commits of pull request #${number}`
+	);
+
+	// One commit on top of where the branch started.
+	const log = execFileSync('git', ['log', '--format=%s', `${started}..two-commits`], {
+		cwd: bare,
+		encoding: 'utf8'
+	});
+	expect(log.trim()).toBe('Add two-commits');
+});

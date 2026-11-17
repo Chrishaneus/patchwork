@@ -176,6 +176,49 @@ export async function createPullRequestWorktree(opts: {
 	return head;
 }
 
+/**
+ * A worktree for squashing a pull request's commits: at the commit its branch started from (its
+ * merge base with the base branch), with the changes of all its commits staged, so committing
+ * makes one commit of them. Returns that commit (`baseCommit`) and the branch's latest commit
+ * (`head`), which the squashed one replaces.
+ */
+export async function createSquashWorktree(opts: {
+	repo: Repository;
+	branch: string;
+	/** The branch the pull request goes into. */
+	baseBranch: string;
+	worktreePath: string;
+	log: (text: string) => void;
+	authEnv?: Record<string, string>;
+}): Promise<{ baseCommit: string; head: string }> {
+	const { repo, baseBranch, worktreePath, log } = opts;
+	const head = await createPullRequestWorktree(opts);
+	const tracking = `refs/remotes/${repo.remoteName}/${baseBranch}`;
+	const fetched = await tryGit(
+		repo.path,
+		['fetch', '--quiet', repo.remoteName, `+refs/heads/${baseBranch}:${tracking}`],
+		{ timeoutMs: 60_000, env: opts.authEnv }
+	);
+	if (fetched === null)
+		log(`Could not fetch ${repo.remoteName}/${baseBranch}; using the last fetched copy.`);
+	const mergeBase = await tryGit(repo.path, ['merge-base', tracking, head]);
+	if (!mergeBase) {
+		throw new EngineError(
+			'git_failed',
+			`Could not find where ${opts.branch} started from ${baseBranch}.`
+		);
+	}
+	const count = Number(await git(repo.path, ['rev-list', '--count', `${mergeBase}..${head}`]));
+	if (count === 0) {
+		throw new EngineError('nothing_to_publish', `${opts.branch} has no commits to squash.`);
+	}
+	await git(worktreePath, ['reset', '--quiet', '--soft', mergeBase]);
+	log(
+		`Squashed ${count} ${count === 1 ? 'commit' : 'commits'} of ${opts.branch} onto ${mergeBase.slice(0, 8)}, where it started from ${baseBranch}.`
+	);
+	return { baseCommit: mergeBase, head };
+}
+
 /** Everything changed in the worktree since `baseCommit`, including new and committed files. */
 export async function collectDiff(worktreePath: string, baseCommit: string): Promise<TaskDiff> {
 	// Mark new files as "intent to add" so they show up in the diff without staging content.

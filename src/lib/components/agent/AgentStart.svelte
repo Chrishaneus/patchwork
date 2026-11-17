@@ -23,7 +23,8 @@
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import {
-		asksToAddressReview,
+		asksToSquash,
+		asksToUpdatePullRequest,
 		detectAgentMode,
 		findPullRequestLink,
 		findPullRequestLinks,
@@ -74,11 +75,16 @@
 	let chosen = $state<string[]>([]);
 	let error = $state<EngineErrorCode | 'no_repos' | 'no_pull' | 'no_attributes' | null>(null);
 
-	onMount(async () => {
+	/** The attributes to rate, ticked; a review sent before they arrive waits for them. */
+	let attributesLoaded: Promise<void> = Promise.resolve();
+
+	onMount(() => {
 		choices.load();
 		if (!repositories.loaded) repositories.load();
-		attributes = (await client.getSettings({}).catch(() => null))?.reviewAttributes ?? [];
-		chosen = attributes.map((a) => a.id);
+		attributesLoaded = (async () => {
+			attributes = (await client.getSettings({}).catch(() => null))?.reviewAttributes ?? [];
+			chosen = attributes.map((a) => a.id);
+		})();
 	});
 
 	// Auto: the mode follows what the message asks for. The keyword rules answer at once, then a
@@ -142,7 +148,8 @@
 	]);
 	const reviewReady = $derived(toReview.length > 0);
 	/** A change with one pull request link that asks to address its review goes to that pull request. */
-	const updatesPullRequest = $derived(links.length === 1 && asksToAddressReview(text));
+	const updatesPullRequest = $derived(links.length === 1 && asksToUpdatePullRequest(text));
+	const squashes = $derived(updatesPullRequest && asksToSquash(text));
 	const placeholder = $derived(
 		auto && !text.trim()
 			? m.agent_placeholder_auto()
@@ -197,6 +204,7 @@
 			let runId: string;
 			if (mode === 'review') {
 				if (!reviewReady) return ((error = 'no_pull'), false);
+				await attributesLoaded;
 				const rated = attributes.filter((a) => chosen.includes(a.id));
 				if (rated.length === 0) return ((error = 'no_attributes'), false);
 				const run = await runs.startReview({
@@ -210,7 +218,8 @@
 				const run = await runs.start({
 					repositoryIds: [],
 					instruction: message,
-					pullRequest: findPullRequestTarget(message) ?? links[0]
+					pullRequest: findPullRequestTarget(message) ?? links[0],
+					...(asksToSquash(message) ? { squash: true } : {})
 				});
 				runId = run.id;
 			} else {
@@ -371,7 +380,9 @@
 			<div class="flex flex-col gap-2 p-3">
 				<p class="hidden text-sm font-medium lg:block">{m.agent_panel_update_pull()}</p>
 				<p class="font-mono text-xs wrap-anywhere">{findPullRequestTarget(text) ?? links[0]}</p>
-				<p class="text-xs text-muted-foreground">{m.agent_update_pull_hint()}</p>
+				<p class="text-xs text-muted-foreground">
+					{squashes ? m.agent_squash_pull_hint() : m.agent_update_pull_hint()}
+				</p>
 			</div>
 		</MobilePanel>
 	{:else}

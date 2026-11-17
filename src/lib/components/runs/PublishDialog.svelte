@@ -28,6 +28,8 @@
 		updates?: ReviewedPullRequest;
 		runs: RunsState;
 	} = $props();
+	/** A squash of the pull request's commits: publishing replaces them with one. */
+	const squash = $derived(!!updates && !!task.squashedFrom);
 	const pullLabel = $derived(
 		updates ? `${updates.provider === 'gitlab' ? '!' : '#'}${updates.number}` : ''
 	);
@@ -55,7 +57,8 @@
 		draft = false;
 		// What it changed for each comment, which is also what reviewers want to read.
 		reply = task.summary ?? '';
-		replying = true;
+		// A squash changes no code, so it says nothing new to reviewers unless you want to.
+		replying = !squash;
 	}
 
 	async function publish(event: SubmitEvent) {
@@ -85,11 +88,13 @@
 			<Button {...props} size="sm">
 				<GitPullRequestArrow />{task.publishError
 					? m.publish_retry()
-					: updates
-						? m.task_push_to_pr({ number: pullLabel })
-						: provider === 'gitlab'
-							? m.task_open_mr()
-							: m.task_open_pr()}
+					: squash
+						? m.task_squash_pr({ number: pullLabel })
+						: updates
+							? m.task_push_to_pr({ number: pullLabel })
+							: provider === 'gitlab'
+								? m.task_open_mr()
+								: m.task_open_pr()}
 			</Button>
 		{/snippet}
 	</Dialog.Trigger>
@@ -98,32 +103,40 @@
 		<form class="grid gap-4" onsubmit={publish}>
 			<Dialog.Header>
 				<Dialog.Title
-					>{updates
-						? m.publish_title_update({ number: pullLabel })
-						: provider === 'gitlab'
-							? m.publish_title_gitlab()
-							: m.publish_title()}</Dialog.Title
+					>{squash
+						? m.publish_title_squash({ number: pullLabel })
+						: updates
+							? m.publish_title_update({ number: pullLabel })
+							: provider === 'gitlab'
+								? m.publish_title_gitlab()
+								: m.publish_title()}</Dialog.Title
 				>
 				<Dialog.Description>
-					{updates
-						? m.publish_description_update({
+					{squash
+						? m.publish_description_squash({
 								branch: task.branch,
 								remote: remoteName,
 								number: pullLabel
 							})
-						: provider === 'github'
-							? m.publish_description({
+						: updates
+							? m.publish_description_update({
 									branch: task.branch,
 									remote: remoteName,
-									base: task.baseBranch
+									number: pullLabel
 								})
-							: provider === 'gitlab'
-								? m.publish_description_gitlab({
+							: provider === 'github'
+								? m.publish_description({
 										branch: task.branch,
 										remote: remoteName,
 										base: task.baseBranch
 									})
-								: m.publish_description_no_github({ branch: task.branch, remote: remoteName })}
+								: provider === 'gitlab'
+									? m.publish_description_gitlab({
+											branch: task.branch,
+											remote: remoteName,
+											base: task.baseBranch
+										})
+									: m.publish_description_no_github({ branch: task.branch, remote: remoteName })}
 				</Dialog.Description>
 			</Dialog.Header>
 			<div class="grid gap-2">
@@ -169,7 +182,13 @@
 			{/if}
 			<Dialog.Footer>
 				<Button type="submit" disabled={busy || !title.trim()}>
-					{busy ? m.publish_submitting() : updates ? m.publish_submit_update() : m.publish_submit()}
+					{busy
+						? m.publish_submitting()
+						: squash
+							? m.publish_submit_squash()
+							: updates
+								? m.publish_submit_update()
+								: m.publish_submit()}
 				</Button>
 			</Dialog.Footer>
 		</form>

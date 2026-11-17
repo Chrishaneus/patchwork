@@ -29,6 +29,34 @@ export function asksToAddressReview(text: string): boolean {
 	return !!findPullRequestLink(text) && ADDRESS_REVIEW.test(text);
 }
 
+const SQUASH = /\bsquash(?:es|ed|ing)?\b/i;
+
+/** Whether a message with a pull request link asks to squash its commits into one. */
+export function asksToSquash(text: string): boolean {
+	return !!findPullRequestLink(text) && SQUASH.test(text);
+}
+
+/** Asking for a review or an opinion, not a change: "review", "check", "look at"… */
+const ASKS_FOR_REVIEW =
+	/\b(review|check|look\s+(at|over|into)|audit|rate|critique|assess|evaluate|comment on)\b/i;
+
+/** Asking for a change: "rename …", "add tests", "rebase", "clean up"… */
+const ASKS_FOR_CHANGE =
+	/\b(add|remove|delete|drop|rename|update|change|edit|fix|refactor|move|rewrite|write|implement|make|bump|upgrade|downgrade|revert|clean\s+up|tidy|split|extract|replace|apply|resolve|address|handle|incorporate|tackle|improve|simplify|convert|migrate|rebase|format|lint|translate|document)\b/i;
+
+/**
+ * Whether a message with a pull request link asks to change it rather than review it: address
+ * its review, squash it, or any other change ("rename the helper in <link>"). Asking to review or
+ * check it, or only the link, is a review.
+ */
+export function asksToUpdatePullRequest(text: string): boolean {
+	if (!findPullRequestLink(text)) return false;
+	if (asksToAddressReview(text) || asksToSquash(text)) return true;
+	// Without the links, whose paths could read as words ("…/update-docs/pull/2").
+	const words = text.replace(/https?:\/\/\S+/gi, ' ');
+	return !ASKS_FOR_REVIEW.test(words) && ASKS_FOR_CHANGE.test(words);
+}
+
 /**
  * The first pull request link with what points into it, such as #pullrequestreview-12 (one
  * review), #discussion_r34 (one thread) or GitLab's #note_56, which `findPullRequestLink` drops.
@@ -58,7 +86,8 @@ const ASK = [
 
 /**
  * Guess what a message asks for, so the Agent can pick the mode itself:
- * - a pull request link with "address/fix … the review" → a change to that pull request;
+ * - a pull request link with a change to make ("address the review", "squash", "rename …") → a
+ *   change to that pull request;
  * - a pull request link, or "review/check … PR #12" → review;
  * - "explore …", "how should we …", "what are the options …" → explore;
  * - a question about the code ("explain …", "what is …", "how does …") → ask;
@@ -66,7 +95,7 @@ const ASK = [
  */
 export function detectAgentMode(text: string): AgentMode {
 	if (!text.trim()) return 'change';
-	if (asksToAddressReview(text)) return 'change';
+	if (asksToUpdatePullRequest(text)) return 'change';
 	if (findPullRequestLink(text) || REVIEW_REQUEST.test(text)) return 'review';
 	if (EXPLORE_START.test(text) || EXPLORE_ANYWHERE.test(text)) return 'explore';
 	if (ASK.some((pattern) => pattern.test(text))) return 'ask';

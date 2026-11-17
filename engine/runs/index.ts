@@ -22,6 +22,7 @@ import {
 	suggestBranchName,
 	uniqueBranchName
 } from '../git/worktrees.js';
+import { asksToAddressReview } from '#lib/engine/agent-mode.js';
 import { readStatus } from '../repositories/index.js';
 import { performChecks } from './checks.js';
 import { executeCodeTask, switchPrompt } from './code-task.js';
@@ -221,16 +222,22 @@ export function createRunService(deps: RunServiceDeps) {
 			branch?: string;
 			separately?: boolean;
 			pullRequest?: string;
+			squash?: boolean;
 		}): Promise<Run> {
 			const instruction = input.instruction?.trim();
 			const ids = [...new Set(input.repositoryIds ?? [])];
 			if (!instruction) throw new EngineError('invalid_input', 'Describe the change first.');
 			if (input.pullRequest?.trim()) {
-				// On the pull request's own branch, in its repository, to address its review.
-				const { repo, pullRequest, feedback } = await findPullRequestToUpdate(
-					ctx,
-					input.pullRequest
-				);
+				// On the pull request's own branch, in its repository: any change, a squash, or what its
+				// review asks for, whose comments the agent gets only when the message asks to address it.
+				const squash = input.squash === true;
+				const {
+					repo,
+					pullRequest,
+					feedback: reviewFeedback
+				} = await findPullRequestToUpdate(ctx, input.pullRequest, {
+					address: asksToAddressReview(`${instruction} ${input.pullRequest}`)
+				});
 				const runId = randomUUID();
 				return queueRun({
 					id: runId,
@@ -247,7 +254,8 @@ export function createRunService(deps: RunServiceDeps) {
 						})
 					],
 					pullRequest,
-					reviewFeedback: feedback
+					...(reviewFeedback ? { reviewFeedback } : {}),
+					...(squash ? { squash } : {})
 				});
 			}
 			if (ids.length === 0)

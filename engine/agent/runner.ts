@@ -96,8 +96,11 @@ export interface AgentRunInput {
 	 * installed the repository's Playwright browsers.
 	 */
 	env?: Record<string, string>;
-	/** A change to an existing pull request (on its branch, `branch`), to address its review. */
-	pullRequest?: { provider: 'github' | 'gitlab'; number: number };
+	/**
+	 * A change to an existing pull request (on its branch, `branch`), or a squash of its commits
+	 * (`squash`: the working copy holds them all, uncommitted).
+	 */
+	pullRequest?: { provider: 'github' | 'gitlab'; number: number; squash?: boolean };
 }
 
 /** One repository's working copy in a change across several. */
@@ -155,10 +158,19 @@ export function guidance(input: AgentRunInput) {
 			input.pullRequest.provider === 'gitlab'
 				? `merge request !${input.pullRequest.number}`
 				: `pull request #${input.pullRequest.number}`;
+		const where = input.pullRequest.squash
+			? [
+					`at the commit the branch "${input.branch}" of ${label} started from "${input.baseBranch}", with the changes of all`,
+					'its commits in place and uncommitted: the app squashes them into one commit, with the message you write.',
+					'Change files only as far as the user asks for more than the squash, following the repository’s conventions.'
+				]
+			: [
+					`at the latest commit of the branch "${input.branch}" of ${label}, which goes into "${input.baseBranch}".`,
+					'Make the change the user asks for on it, following the conventions already used in the repository.'
+				];
 		return [
 			`You are working in an isolated git worktree of the repository "${input.repository.slug ?? input.repository.name}",`,
-			`at the latest commit of the branch "${input.branch}" of ${label}, which goes into "${input.baseBranch}".`,
-			'Address its review as the user asks, following the conventions already used in the repository.',
+			...where,
 			'Run the project’s existing checks or tests when that is practical, and fix what your change breaks.',
 			'Do not commit, push, or comment on the pull request: the app adds your change to it after a person reviews it.',
 			COMMIT_FORMAT,

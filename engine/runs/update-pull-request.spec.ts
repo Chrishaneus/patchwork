@@ -200,6 +200,128 @@ describe('addressing a pull request’s review', () => {
 		expect(git(repo.dir, 'rev-parse', 'add-login')).toBe(prHead);
 	});
 
+	it('squashes its commits into one with the message the agent writes', async () => {
+		const inputs: AgentRunInput[] = [];
+		const agent: AgentRunner = async (input) => {
+			inputs.push(input);
+			return {
+				summary: 'Title: Add login\n\nAdds a login that checks the password.',
+				costUsd: 0,
+				turns: 1
+			};
+		};
+		const { engine, repo, gh, prHead } = await pullRequestWithReview(agent);
+		// A second commit on the pull request, and main moving on meanwhile.
+		git(repo.dir, 'checkout', '-q', 'add-login');
+		writeFileSync(path.join(repo.dir, 'login.ts'), 'export const login = (p: string) => !!p;\n');
+		git(repo.dir, 'commit', '-q', '-am', 'Check the password');
+		git(repo.dir, 'push', '-q', 'origin', 'add-login');
+		git(repo.dir, 'checkout', '-q', 'main');
+		const mergeBase = git(repo.dir, 'rev-parse', 'add-login~2');
+		writeFileSync(path.join(repo.dir, 'other.md'), 'Other\n');
+		git(repo.dir, 'add', '.');
+		git(repo.dir, 'commit', '-q', '-m', 'Other work');
+		git(repo.dir, 'push', '-q', 'origin', 'main');
+		const before = git(repo.bareDir, 'rev-parse', 'add-login');
+
+		const run = await engine.startRun({
+			repositoryIds: [],
+			instruction: 'Can you squash the commits please',
+			pullRequest: 'https://github.com/acme/widgets/pull/1',
+			squash: true
+		});
+		expect(run).toMatchObject({ squash: true });
+		expect(run.reviewFeedback).toBeUndefined();
+		const task = await waitFor(engine, run.tasks[0].id, 'awaiting_review');
+		expect(task).toMatchObject({ baseCommit: mergeBase, squashedFrom: before });
+		// The agent gets the commits' messages, not the review, and works on the whole change.
+		const prompt = inputs[0].instruction;
+		expect(prompt).toContain('1.\n\nAdd login\n\n2.\n\nCheck the password');
+		expect(prompt).not.toContain('Nearly there.');
+		expect(inputs[0].pullRequest).toEqual({ provider: 'github', number: 1, squash: true });
+		expect(guidance(inputs[0])).toContain('squashes them into one commit');
+		const diff = await engine.getTaskDiff({ taskId: task.id });
+		expect(diff.stat.files).toBe(1);
+		expect(diff.patch).toContain('+export const login = (p: string) => !!p;');
+
+		const published = await engine.publishTask({
+			taskId: task.id,
+			title: 'Add login',
+			body: 'Adds a login that checks the password.'
+		});
+		expect(published).toMatchObject({ status: 'published', publishError: null });
+		// One commit on top of where the branch started, with the same files as before.
+		expect(git(repo.bareDir, 'rev-list', '--count', `${mergeBase}..add-login`)).toBe('1');
+		expect(git(repo.bareDir, 'rev-parse', 'add-login~1')).toBe(mergeBase);
+		expect(git(repo.bareDir, 'log', '-1', '--format=%B', 'add-login')).toBe(
+			'Add login\n\nAdds a login that checks the password.'
+		);
+		expect(git(repo.bareDir, 'diff', before, 'add-login')).toBe('');
+		expect(gh.pulls).toHaveLength(1);
+		const log = (await engine.getTaskLog({ taskId: task.id })).map((e) => e.text);
+		expect(log).toContain(
+			'Squashed 2 commits of add-login onto ' +
+				mergeBase.slice(0, 8) +
+				', where it started from main.'
+		);
+		expect(log).toContain(`Squashed the commits of pull request #1: ${gh.url}/acme/widgets/pull/1`);
+		// Your own branch of the same name isn't moved.
+		expect(git(repo.dir, 'rev-parse', 'add-login~1')).toBe(prHead);
+	});
+
+	it('replaces nothing when someone pushed to the branch since it was squashed', async () => {
+		const agent: AgentRunner = async () => ({
+			summary: 'Title: Add login\n\nx',
+			costUsd: 0,
+			turns: 1
+		});
+		const { engine, repo } = await pullRequestWithReview(agent);
+		const run = await engine.startRun({
+			repositoryIds: [],
+			instruction: 'squash https://github.com/acme/widgets/pull/1',
+			pullRequest: 'https://github.com/acme/widgets/pull/1',
+			squash: true
+		});
+		const task = await waitFor(engine, run.tasks[0].id, 'awaiting_review');
+		git(repo.dir, 'checkout', '-q', 'add-login');
+		writeFileSync(path.join(repo.dir, 'late.md'), 'Late\n');
+		git(repo.dir, 'add', '.');
+		git(repo.dir, 'commit', '-q', '-m', 'Late commit');
+		git(repo.dir, 'push', '-q', 'origin', 'add-login');
+		const late = git(repo.dir, 'rev-parse', 'HEAD');
+
+		const refused = await engine.publishTask({ taskId: task.id, title: 'Add login', body: '' });
+		expect(refused).toMatchObject({
+			status: 'awaiting_review',
+			publishError: { code: 'push_failed' }
+		});
+		expect(refused.publishError!.message).toContain('has commits that weren’t squashed');
+		expect(git(repo.bareDir, 'rev-parse', 'add-login')).toBe(late);
+	});
+
+	it('makes any change on its branch, without the review unless asked to address it', async () => {
+		const inputs: AgentRunInput[] = [];
+		const agent: AgentRunner = async (input) => {
+			inputs.push(input);
+			writeFileSync(path.join(input.cwd, 'login.ts'), 'export const signIn = () => true;\n');
+			return { summary: 'Title: Rename login to signIn\n\nRenamed.', costUsd: 0, turns: 1 };
+		};
+		const { engine, repo, prHead } = await pullRequestWithReview(agent);
+		const run = await engine.startRun({
+			repositoryIds: [],
+			instruction: 'Rename login to signIn',
+			pullRequest: 'https://github.com/acme/widgets/pull/1'
+		});
+		expect(run.reviewFeedback).toBeUndefined();
+		const task = await waitFor(engine, run.tasks[0].id, 'awaiting_review');
+		expect(task.baseCommit).toBe(prHead);
+		expect(inputs[0].instruction).toContain('You are on its branch');
+		expect(inputs[0].instruction).not.toContain('Check the password.');
+		expect(guidance(inputs[0])).toContain('Make the change the user asks for on it');
+		await engine.publishTask({ taskId: task.id, title: 'Rename login to signIn', body: '' });
+		expect(git(repo.bareDir, 'rev-parse', 'add-login~1')).toBe(prHead);
+	});
+
 	it('refuses a pull request without review comments', async () => {
 		const { engine } = await pullRequestWithReview(async () => ({
 			summary: '',

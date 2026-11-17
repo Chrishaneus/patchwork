@@ -137,11 +137,16 @@ export function feedbackMarkdown(items: ReviewFeedback[]): string {
 }
 
 /**
- * The pull request a change goes to, to address its review: its repository (added if needed),
- * its branches, and its review comments (one review or thread if the link points at it).
- * Refuses a pull request from a fork, whose branch can't be pushed to, and one without comments.
+ * The pull request a change goes to: its repository (added if needed), its branches, and, to
+ * `address` its review, its review comments (one review or thread if the link points at it).
+ * Refuses a pull request from a fork, whose branch can't be pushed to, and, to address its
+ * review, one without comments.
  */
-export async function findPullRequestToUpdate(ctx: RunContext, url: string) {
+export async function findPullRequestToUpdate(
+	ctx: RunContext,
+	url: string,
+	opts: { address: boolean }
+) {
 	const { repo, number } = await repositoryForPullRequest(ctx, url);
 	const { provider, slug } = await providerOf(ctx, repo);
 	const details = await provider.get(slug, number);
@@ -153,8 +158,8 @@ export async function findPullRequestToUpdate(ctx: RunContext, url: string) {
 		);
 	}
 	const anchor = new URL(url.trim()).hash.replace(/^#/, '') || null;
-	const feedback = await provider.feedback(slug, number, anchor);
-	if (feedback.length === 0) {
+	const feedback = opts.address ? await provider.feedback(slug, number, anchor) : [];
+	if (feedback.length === 0 && opts.address) {
 		throw new EngineError('invalid_pull_request', `${label} has no review comments to address.`);
 	}
 	const pullRequest: ReviewedPullRequest = {
@@ -166,5 +171,9 @@ export async function findPullRequestToUpdate(ctx: RunContext, url: string) {
 		headRef: details.headRef,
 		repositoryId: repo.id
 	};
-	return { repo, pullRequest, feedback: feedbackMarkdown(feedback) };
+	return {
+		repo,
+		pullRequest,
+		feedback: feedback.length > 0 ? feedbackMarkdown(feedback) : undefined
+	};
 }
