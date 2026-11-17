@@ -196,6 +196,8 @@
 	"publish_commit_title": "Título del commit",
 	"publish_commit_body": "Descripción del commit",
 	"publish_submit_update": "Subir",
+	"publish_reply": "Responder en {number}",
+	"publish_reply_hint": "Se publica en la conversación una vez subido el commit, con un enlace a él. Si GitHub o GitLab la rechaza, no se marca como publicado y puedes volver a intentarlo.",
 	"task_push_to_pr": "Subir a {number}",
 	"agent_panel_update_pull": "Pull request que actualizar",
 	"agent_update_pull_hint": "El agente trabaja en la rama de este pull request, con sus comentarios de revisión. Al publicar, los cambios se suben a él; no se abre un pull request nuevo.",

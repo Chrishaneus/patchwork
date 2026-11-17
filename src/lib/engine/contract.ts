@@ -384,6 +384,11 @@ export interface PublishInput {
 	/** PR description, also the rest of the commit message. */
 	body: string;
 	draft?: boolean;
+	/**
+	 * A change to a pull request (`run.pullRequest`): the reply posted in its conversation once
+	 * the commit is pushed. Empty or missing: no reply.
+	 */
+	reply?: string;
 }
 
 /** One instruction applied to one or more repositories. */

@@ -114,15 +114,47 @@ describe('addressing a pull request’s review', () => {
 		expect(diff.stat.files).toBe(1);
 		expect(diff.patch).toContain('+export const login = (password: string)');
 
+		// A refused reply leaves the change in review, though the commit went out; trying again
+		// pushes nothing new and posts the reply.
+		gh.refuseReplies(true);
+		const refused = await engine.publishTask({
+			taskId: task.id,
+			title: 'Check the password on login',
+			body: 'Login now checks the password.',
+			reply: 'Done: login checks the password now.'
+		});
+		expect(refused).toMatchObject({
+			status: 'awaiting_review',
+			publishError: { code: 'github_failed' }
+		});
+		expect(refused.publishError!.message).toContain('GitHub refused the reply (403)');
+		expect(gh.replies).toEqual([]);
+		const pushed = git(repo.bareDir, 'rev-parse', 'add-login');
+
+		gh.refuseReplies(false);
 		const published = await engine.publishTask({
 			taskId: task.id,
 			title: 'Check the password on login',
-			body: 'Login now checks the password.'
+			body: 'Login now checks the password.',
+			reply: 'Done: login checks the password now.'
 		});
 		expect(published).toMatchObject({
 			status: 'published',
+			publishError: null,
 			pullRequest: { number: 1, url: `${gh.url}/acme/widgets/pull/1` }
 		});
+		expect(git(repo.bareDir, 'rev-parse', 'add-login')).toBe(pushed);
+		expect(gh.replies).toEqual([
+			expect.objectContaining({
+				repo: 'acme/widgets',
+				number: 1,
+				body: `Done: login checks the password now.\n\nChanges: ${pushed}`
+			})
+		]);
+		const log = await engine.getTaskLog({ taskId: task.id });
+		expect(log.map((e) => e.text)).toContain(
+			`Replied on pull request #1: ${gh.url}/acme/widgets/pull/1#issuecomment-1`
+		);
 		// No new pull request; the commit is on the pull request's branch, on top of its head.
 		expect(gh.pulls).toHaveLength(1);
 		expect(git(repo.bareDir, 'log', '-1', '--format=%s', 'add-login')).toBe(
@@ -133,13 +165,13 @@ describe('addressing a pull request’s review', () => {
 		expect(git(repo.dir, 'rev-parse', 'add-login')).toBe(prHead);
 	});
 
-	it('takes every review without an anchor, and keeps your branch when discarded', async () => {
+	it('takes every review without an anchor', async () => {
 		const inputs: AgentRunInput[] = [];
 		const agent: AgentRunner = async (input) => {
 			inputs.push(input);
 			return { summary: 'Title: Nothing\n\nNo change.', costUsd: 0, turns: 1 };
 		};
-		const { engine, repo, prHead } = await pullRequestWithReview(agent);
+		const { engine, gh } = await pullRequestWithReview(agent);
 		const run = await engine.startRun({
 			repositoryIds: [],
 			instruction: 'fix the review comments',
@@ -147,6 +179,23 @@ describe('addressing a pull request’s review', () => {
 		});
 		const task = await waitFor(engine, run.tasks[0].id, 'awaiting_review');
 		expect(inputs[0].instruction).toContain('Check the password.');
+		// Publishing without a reply posts none.
+		writeFileSync(path.join(task.worktreePath!, 'notes.md'), 'Notes\n');
+		expect(
+			await engine.publishTask({ taskId: task.id, title: 'Add notes', body: '' })
+		).toMatchObject({ status: 'published' });
+		expect(gh.replies).toEqual([]);
+	});
+
+	it('keeps your branch when a change to a pull request is discarded', async () => {
+		const agent: AgentRunner = async () => ({ summary: 'Title: x\n\ny', costUsd: 0, turns: 1 });
+		const { engine, repo, prHead } = await pullRequestWithReview(agent);
+		const run = await engine.startRun({
+			repositoryIds: [],
+			instruction: 'fix the review comments',
+			pullRequest: 'https://github.com/acme/widgets/pull/1'
+		});
+		const task = await waitFor(engine, run.tasks[0].id, 'awaiting_review');
 		await engine.discardTask({ taskId: task.id });
 		expect(git(repo.dir, 'rev-parse', 'add-login')).toBe(prHead);
 	});

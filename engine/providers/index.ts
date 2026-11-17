@@ -41,6 +41,8 @@ export interface ProviderClient {
 	feedback(slug: string, number: number, anchor?: string | null): Promise<ReviewFeedback[]>;
 	listOpen(slug: string): Promise<PullRequestSummary[]>;
 	comment(slug: string, number: number, body: string): Promise<string>;
+	/** A reply in the pull request's conversation, not a review. Returns its link. */
+	reply(slug: string, number: number, body: string): Promise<string>;
 	/**
 	 * Post a review with comments on lines of the pull request. `body(notInline)` is the main
 	 * comment, given the comments that couldn't go on their lines. Returns its link and those.

@@ -293,11 +293,22 @@ test('addresses a pull request’s review on its branch and pushes to it', async
 	await expect(dialog.getByRole('heading')).toHaveText(`Push to #${number}`);
 	await expect(dialog.getByText('Open as a draft')).toHaveCount(0);
 	await dialog.getByLabel('Commit title').fill('Add a changelog for the review');
+	// The reply is offered, filled in with what the agent did, and can be edited before it's sent.
+	const reply = dialog.getByRole('textbox', { name: `Reply on #${number}` });
+	await expect(reply).toHaveValue(/Added a changelog entry/);
+	await reply.fill('Added the changelog you asked for.');
 	await dialog.getByRole('button', { name: 'Push', exact: true }).click();
 	await expect(task).toHaveAttribute('data-task-status', 'published');
 	await expect(task.getByTestId('task-log')).toContainText(
 		`Added the commit to pull request #${number}`
 	);
+	await expect(task.getByTestId('task-log')).toContainText(`Replied on pull request #${number}`);
+	const conversation = await request.get(
+		`${FAKE_GITHUB}/repos/acme/gh-review/issues/${number}/comments`,
+		{ headers: { authorization: 'Bearer e2e-token' } }
+	);
+	const [replied] = (await conversation.json()) as { body: string }[];
+	expect(replied.body).toMatch(/^Added the changelog you asked for\.\n\nChanges: [0-9a-f]{40}$/);
 
 	// The commit is on the pull request's branch, on top of its first commit; no new pull request.
 	const bare = path.resolve('.e2e/gh-review.git');

@@ -42,6 +42,9 @@
 	let title = $state('');
 	let body = $state('');
 	let draft = $state(false);
+	/** A change to a pull request: the reply posted on it after the push, if `replying`. */
+	let reply = $state('');
+	let replying = $state(true);
 	let busy = $state(false);
 	const actionError = $derived(runs.actionErrors[task.id]);
 
@@ -50,12 +53,21 @@
 		title = task.title || defaultTitle(instruction);
 		body = task.summary ?? '';
 		draft = false;
+		// What it changed for each comment, which is also what reviewers want to read.
+		reply = task.summary ?? '';
+		replying = true;
 	}
 
 	async function publish(event: SubmitEvent) {
 		event.preventDefault();
 		busy = true;
-		const result = await runs.publish({ taskId: task.id, title, body, draft });
+		const result = await runs.publish({
+			taskId: task.id,
+			title,
+			body,
+			draft,
+			...(updates && replying && reply.trim() ? { reply } : {})
+		});
 		busy = false;
 		// Close on success, and also on a publish error: the task card shows it with a retry.
 		if (result) open = false;
@@ -128,6 +140,24 @@
 					bind:value={body}
 				/>
 			</div>
+			{#if updates}
+				<div class="grid gap-2" data-testid="publish-reply">
+					<Label class="flex items-center gap-2">
+						<Checkbox checked={replying} onCheckedChange={(v) => (replying = v === true)} />
+						{m.publish_reply({ number: pullLabel })}
+					</Label>
+					{#if replying}
+						<Textarea
+							id="pr-reply"
+							aria-label={m.publish_reply({ number: pullLabel })}
+							rows={6}
+							class="max-h-[30svh] overflow-y-auto font-mono text-xs"
+							bind:value={reply}
+						/>
+						<p class="text-xs text-muted-foreground">{m.publish_reply_hint()}</p>
+					{/if}
+				</div>
+			{/if}
 			{#if provider && !updates}
 				<Label class="flex items-center gap-2 font-normal">
 					<Checkbox checked={draft} onCheckedChange={(v) => (draft = v === true)} />

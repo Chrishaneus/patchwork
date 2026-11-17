@@ -59,6 +59,10 @@ export interface FakeGitHub {
 	setState: (repo: string, number: number, state: 'open' | 'closed' | 'merged') => void;
 	/** Approve (or deny) the most recent device-flow sign-in, like clicking the button on GitHub. */
 	approveDevice: (decision?: 'approve' | 'deny') => string | null;
+	/** Comments posted in pull requests' conversations (issue comments). */
+	replies: { repo: string; number: number; body: string; html_url: string }[];
+	/** Refuse new conversation comments (403), like a token without that permission. */
+	refuseReplies: (refuse: boolean) => void;
 	close: () => Promise<void>;
 }
 
@@ -152,6 +156,8 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
 			? (JSON.parse(readFileSync(stateFile, 'utf8')) as FakePull[])
 			: [];
 	const reviews: FakeGitHub['reviews'] = [];
+	const replies: FakeGitHub['replies'] = [];
+	let refusingReplies = false;
 	const save = () => stateFile && writeFileSync(stateFile, JSON.stringify(pulls, null, 2));
 	let baseUrl = '';
 
@@ -281,8 +287,37 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
 				: sendJson(res, 404, { message: 'Not Found' });
 		}
 
+		// API: POST /repos/:owner/:repo/issues/:number/comments, a comment in a PR's conversation.
+		if (
+			parts[0] === 'repos' &&
+			parts[3] === 'issues' &&
+			parts[5] === 'comments' &&
+			parts.length === 6 &&
+			req.method === 'POST'
+		) {
+			if (!req.headers.authorization?.startsWith('Bearer ')) {
+				return sendJson(res, 401, { message: 'Requires authentication' });
+			}
+			if (refusingReplies) {
+				return sendJson(res, 403, { message: 'Resource not accessible by integration' });
+			}
+			const repo = `${parts[1]}/${parts[2]}`;
+			const pull = pulls.find((p) => p.repo === repo && p.number === Number(parts[4]));
+			if (!pull) return sendJson(res, 404, { message: 'Not Found' });
+			const input = (await readForm(req)) as { body?: string };
+			if (!input.body) return sendJson(res, 422, { message: 'Body is required' });
+			const reply = {
+				repo,
+				number: pull.number,
+				body: input.body,
+				html_url: `${pull.html_url}#issuecomment-${replies.length + 1}`
+			};
+			replies.push(reply);
+			return sendJson(res, 201, { id: replies.length, html_url: reply.html_url });
+		}
+
 		// API: GET a pull request's reviews, one review, its comments, all line comments, and the
-		// conversation (always empty here). Reviews are by "reviewer"; ids count from 1.
+		// conversation (the replies posted). Reviews are by "reviewer"; ids count from 1.
 		if (
 			parts[0] === 'repos' &&
 			['pulls', 'issues'].includes(parts[3]) &&
@@ -294,7 +329,15 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
 			}
 			const repo = `${parts[1]}/${parts[2]}`;
 			const number = Number(parts[4]);
-			if (parts[3] === 'issues') return sendJson(res, 200, []);
+			if (parts[3] === 'issues') {
+				return sendJson(
+					res,
+					200,
+					replies
+						.filter((r) => r.repo === repo && r.number === number)
+						.map((r) => ({ body: r.body, html_url: r.html_url, user: { login: 'sandbox-user' } }))
+				);
+			}
 			const mine = reviews
 				.map((r, i) => ({ ...r, id: i + 1 }))
 				.filter((r) => r.repo === repo && r.number === number);
@@ -517,6 +560,10 @@ ${
 		reviews,
 		setState,
 		approveDevice: (decision = 'approve') => approveDevice(decision),
+		replies,
+		refuseReplies: (refuse) => {
+			refusingReplies = refuse;
+		},
 		close: () =>
 			new Promise<void>((resolve) => {
 				server.closeAllConnections();

@@ -295,6 +295,22 @@ export function createGitHubClient(opts: { apiUrl: string; token: string }) {
 				);
 			}
 			return String((res.data as { html_url?: string }).html_url ?? '');
+		},
+
+		/** A reply in the pull request's conversation (an issue comment). Returns its link. */
+		async reply(slug: string, number: number, body: string): Promise<string> {
+			const res = await request('POST', `/repos/${slug}/issues/${number}/comments`, { body });
+			if (res.status !== 201 && res.status !== 200) {
+				const hint =
+					res.status === 403 || res.status === 404
+						? ' The token may not have access to comment on this repository (it needs issues or pull requests write access).'
+						: '';
+				throw new EngineError(
+					'github_failed',
+					`GitHub refused the reply (${res.status}): ${describe(res.data) || 'unknown error'}.${hint}`
+				);
+			}
+			return String((res.data as { html_url?: string }).html_url ?? '');
 		}
 	};
 }

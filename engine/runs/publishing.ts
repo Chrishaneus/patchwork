@@ -73,6 +73,17 @@ export async function publishTask(ctx: RunContext, input: PublishInput): Promise
 			};
 			const label = existing.provider === 'gitlab' ? `merge request !` : `pull request #`;
 			say(`Added the commit to ${label}${existing.number}: ${existing.url}`);
+			// Only once the push went through, so the reply never speaks of changes that aren't there.
+			// If it's refused, publishing fails and can be retried: the push is then a no-op.
+			const reply = input.reply?.trim();
+			if (reply && provider && repo.slug) {
+				const url = await provider.reply(
+					repo.slug,
+					existing.number,
+					`${reply}\n\nChanges: ${commitSha}`
+				);
+				say(`Replied on ${label}${existing.number}: ${url}`);
+			}
 		} else if (provider) {
 			pullRequest = await provider.openPullRequest({
 				slug: repo.slug!,

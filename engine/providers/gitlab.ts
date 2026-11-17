@@ -248,6 +248,11 @@ export function createGitLabClient(opts: { apiUrl: string; token: string }) {
 			const base = String((mr.data as { web_url?: string }).web_url ?? '');
 			const id = (res.data as { id?: number }).id;
 			return id && base ? `${base}#note_${id}` : base;
+		},
+
+		/** A reply in the merge request's conversation: a note, like `comment`. */
+		async reply(slug: string, iid: number, body: string): Promise<string> {
+			return this.comment(slug, iid, body);
 		}
 	};
 }

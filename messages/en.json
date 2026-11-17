@@ -196,6 +196,8 @@
 	"publish_commit_title": "Commit title",
 	"publish_commit_body": "Commit description",
 	"publish_submit_update": "Push",
+	"publish_reply": "Reply on {number}",
+	"publish_reply_hint": "Posted in the conversation once the commit is pushed, with a link to it. If GitHub or GitLab refuses it, nothing is marked published and you can try again.",
 	"task_push_to_pr": "Push to {number}",
 	"agent_panel_update_pull": "Pull request to update",
 	"agent_update_pull_hint": "The agent works on this pull request's branch, with its review comments. Publishing pushes the changes to it; no new pull request is opened.",
